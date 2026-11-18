@@ -51,6 +51,7 @@
 - 第十三批（看过代码评审的四条存活意见之后）：「以上四条如果不需要跟我讨论我不予置评」；要不要复审：「要」。
 - 第十四批（构建期间）：「于此同时你可以提交，push，并通知 concept A1 rebase」；新文件逐个列出后，作者选了打包文件 9 个、测试 session 8 个、计划文件 1 个；「修测试代码时可以直接重跑，不用每次问我」；「与测试、文档相关的，在不改变需求、设计、与我的决策的前提下，你可以自决」。
 - 第十五批：concept B 转来判据的缺口（作者批准转给本会话：「可以把 mask 判据的缺口转给 generic mksimps 会话」）；我报给作者后，作者：「采用 concept B 提的改法」（4.4 判据、4.6）。
+- 第十六批：「批准提交与推送。release 暂缓，最后跟别的 features 统一做」。MLML 子模块登记、空闲时重测开销这两问作者没有答，不做。
 
 状态（2026-11-17 15:55 UTC）：
 
@@ -341,6 +342,7 @@ fn ctxt => fn th =>
 - `clear_simpset` 只留标记为 `true` 的，是为了 `simp only:` 的含义：用户期望只有他列出的规则和前提；会额外推出规则的处理器不该悄悄留在那里（陷阱第 4 条）。
 - concept 的 selector Simpset 是由 `clear_simpset` 造的（另一个 fork 的 `MLML/ai-artifacts/CONCEPT_UNARY_PLAN.md:396`，2026-11-17 读到的）。concept 的处理器填 `true`，就会留在里面；HOL 的四个也填 `true`，所以 concept 的处理器在那里同样看得到 connective 里面的部分。这正是 concept A1 转来这个配置的原因：定义实例时"祖先实例成立"作为前提 cut 进来，selector Simpset 里条件 `concept t` 要靠它消掉。
   - **后来的变化（concept B 2026-11-18 转来，作者在 concept 的 B 区评审 B3 之后定的）**：concept 只登记一个处理器，pattern `Trueprop ?P`，优先级取负数（让 HOL 的四个先拆），头不是 concept 谓词时返回 `NONE`；`kept_by_clear_simpset = false`，因为 selector Simpset 的初值在 concept 的类型层加载时就算好了（那时还没有 concept，`clear_simpset` 留不下它），改由 concept 的包在加载时把这个处理器同时加进 theory 的 simpset 和 selector Simpset。上面一段与 4.6 陷阱第 4 条、4.8 第 5 条里"concept 的处理器填 `true`"随之过时；HOL 的四个仍是 `true`。这是 concept 的用法，不改本 feature 的设计。
+  - **concept 处理器的定案（concept B 2026-11-18 转来，作者经两轮 Opus agent 验证后定）**：对三种定理返回 `NONE`：头不是 concept 谓词的、带前提的、不带假设（hyps 为空）的；其余接受，含 schematic 变量的 `C t` 也接受（例如收进来的 `∀i. group (G i)` 去掉 `∀` 后的 `group (G ?x)`），配同一个 mask（建在处理器收到的那条原定理上）。4.3、4.6 示意里"带 unknown 的返回 `NONE`"随之不再是 concept 的做法（仍可当示例读）。concept 说它的安全依赖两个前提，我在 `1aa94bd` 上核对过都成立并回复了它：(1) 唯一保留处理器上下文的调用点是 `rules_of_prem`（`raw_simplifier.ML:1519`），显式加规则的路径和 `mksimps` 都丢掉上下文；(2) HOL 的四个处理器不会把带假设的定理换成不带假设的（`RS` 保留假设，`Variable.trade` 只动变量）。**以后若新增保留上下文的调用点，或有处理器会去掉假设，要通知 concept。**
 
 不提供 Isar 层的命令或 attribute，不做 morphism 变换（simproc 的 `Morphism.entity` 那一套）：第一个使用者在 theory 层按常量登记，用不到。以后要再加。
 
