@@ -1,0 +1,13 @@
+(* The test session of generic_mksimps: build it with an extra
+   "-d contrib/generic_mksimps/tests". *)
+
+session Generic_Mksimps_Test = HOL +
+  description "
+    Checks of mksimps handlers: dispatch, premise visibility, HOL's connective handlers, names,
+    clearing and merging.  Any failing check fails the build.
+  "
+  options [timeout = 600]
+  theories
+    Generic_Mksimps_Test
+    Generic_Mksimps_Merge
+    Generic_Mksimps_Merge_Swapped

@@ -1,0 +1,8 @@
+# Every signature entry generic_mksimps adds to an .ML file, as
+# `<path> <SIGNATURE NAME> <keyword> <name>` (check-signatures).
+src/Pure/raw_simplifier.ML RAW_SIMPLIFIER type mksimps_handler
+src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val make_mksimps_handler
+src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val add_mksimps_handler
+src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val del_mksimps_handler
+src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val mksimps_context
+src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val simproc_can_use_thm

@@ -1,0 +1,10 @@
+[submodule "worktrees/Isabelle2026-generic_mksimps"]
+	path = worktrees/Isabelle2026-generic_mksimps
+	url = https://github.com/xqyww123/isabelle-patched.git
+	branch = Isabelle2026/generic_mksimps
+	base = Isabelle2026/dot_syntax
+	ignore = all
+[submodule "worktrees/Isabelle2026-generic_mksimps-stock"]
+	path = worktrees/Isabelle2026-generic_mksimps-stock
+	url = https://github.com/xqyww123/isabelle-patched.git
+	ignore = all

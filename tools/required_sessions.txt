@@ -1,0 +1,7 @@
+# Sessions to build on the commit to release, before make-patches (SKILL isabelle-patch-feature,
+# section 3.4 step 4).  One per line; # starts a comment.
+# HOL because the patched files src/Pure/raw_simplifier.ML and src/Pure/simplifier.ML are part of
+# Pure, below everything, and src/HOL/Tools/simpdata.ML is part of HOL; Generic_Mksimps_Test is the
+# test session (tests/ROOT: build it with an extra "-d contrib/generic_mksimps/tests").
+HOL
+Generic_Mksimps_Test
