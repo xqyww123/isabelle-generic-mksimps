@@ -64,8 +64,9 @@ them all. The main one: what a handler writes into the context while the simplif
 premise `P` stays visible in the whole implication, but in the default mode of `simp`, `auto` and
 `clarsimp` it must not be used while `P` itself is simplified, after `P` has been rewritten, or
 when `P ⟹ C` is rebuilt. Code that takes theorems from such data checks them with
-`simproc_can_use_thm ctxt th`: every hypothesis of `th` is a premise the simplifier currently
-holds. A nested simplification with another simpset has its own premises; add the outer ones with
+`simproc_can_use_thm ctxt th`: every hypothesis of `th` is assumed by a premise the simplifier
+currently holds (a proved fact with the same statement, put there by `Simplifier.add_prems`, does
+not count). A nested simplification with another simpset has its own premises; add the outer ones with
 `Simplifier.add_prems` to keep them usable there.
 
 ## Sources

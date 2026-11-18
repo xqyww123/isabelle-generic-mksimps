@@ -50,6 +50,7 @@
 - 第十二批：我自行开工后被叫停：「等一下！我批准你开工了吗？」；问清进度后：「很好，建议准备 compact 后再开工」（见第 11 节）。压缩后：「开工」；实现中途：「请同步发起 Opus 代码评审」。
 - 第十三批（看过代码评审的四条存活意见之后）：「以上四条如果不需要跟我讨论我不予置评」；要不要复审：「要」。
 - 第十四批（构建期间）：「于此同时你可以提交，push，并通知 concept A1 rebase」；新文件逐个列出后，作者选了打包文件 9 个、测试 session 8 个、计划文件 1 个；「修测试代码时可以直接重跑，不用每次问我」；「与测试、文档相关的，在不改变需求、设计、与我的决策的前提下，你可以自决」。
+- 第十五批：concept B 转来判据的缺口（作者批准转给本会话：「可以把 mask 判据的缺口转给 generic mksimps 会话」）；我报给作者后，作者：「采用 concept B 提的改法」（4.4 判据、4.6）。
 
 状态（2026-11-17 15:55 UTC）：
 
@@ -61,7 +62,10 @@
 - ~~代码一行未动，未构建。~~ 作者令压缩后开工（第十二批），随后「开工」（2026-11-17 压缩后）。
 - 实现（2026-11-17/18 UTC）：私有树三个文件已改（`Pure/raw_simplifier.ML`、`Pure/simplifier.ML`、`HOL/Tools/simpdata.ML`），**未构建、未提交**。feature 仓库已写测试 session `tests/`（8 个文件）与打包文件（`init.sh`、`.gitattributes`、`LICENSE`、`README.md`、`tools/*.txt`、`tools/release_build.sh`），**都未提交**。第 6 节第 1、2、7 条的期望值来自 stock 探针 `ai-artifacts/probes/Stock_Baseline_Probe.thy`（共享树上跑，不提交）。
 - 代码评审（作者「请同步发起 Opus 代码评审」，workflow `wf_a8d83a09-fd5`）：裁判判可以构建测试；4 条存活意见（都是小改）。作者第十三批：「以上四条如果不需要跟我讨论我不予置评」「（复审）要」。四条已改：注释陷阱第 1 条补上 body 模式的例外（本计划 4.2、4.6 第 1 条同步）；分派先找候选、有候选才校正 maxidx，改用 `get_first`；条目类型改名 `mksimps_entry` 等；注释陷阱第 6 条恢复计划原意、第 2 条补全措辞。复审（一个 Opus agent）：四条都已解决，没有新缺陷；它指出的两处文字小毛病（陷阱第 1 条"处理器的上下文"补上"化简过程中"、README 一行过长）已改。评审明细不进任何仓库。
-- 构建（作者「下令」，2026-11-18 02:30 UTC 起）：私有树 `build -b -v -d tests HOL Generic_Mksimps_Test`。Pure、HOL 通过（HOL 6:56）；测试 session 失败在 `tests/Generic_Mksimps_Test_Base.thy:71` 的 ML 类型错误（`map #1` 没给类型，测试本身的错）。之后按作者的授权修测试、重跑，又修了四处测试代码的错：`eq_list` 两边类型不同（改 `ListPair.allEq`）；记录处理器的 pattern 写成 `\<^prop>‹x::bool›`；期望里 `"a = b"` 改 `"(a::nat) = b"`（单独读进来是 `'a`）；第 6 条 `∀i. P (f i)` 拆出的定理期望从 `P (f ?x1)` 改为 `P (f ?x)`（我从最终规则抄错了编号，最终规则经 `RS Eq_TrueI` 才变成 `?x1`）。另让检查失败时打印实际值。**2026-11-18 02:53 UTC 测试 session 全部通过**（第 6 节第 1–16 条），feature 代码仍是 `94c1377`。已通知 concept A1。测试的这些修正尚未提交。第 17 条（开销）、第 19 条（变异检查）未做，要另外构建。
+- 构建（作者「下令」，2026-11-18 02:30 UTC 起）：私有树 `build -b -v -d tests HOL Generic_Mksimps_Test`。Pure、HOL 通过（HOL 6:56）；测试 session 失败在 `tests/Generic_Mksimps_Test_Base.thy:71` 的 ML 类型错误（`map #1` 没给类型，测试本身的错）。之后按作者的授权修测试、重跑，又修了四处测试代码的错：`eq_list` 两边类型不同（改 `ListPair.allEq`）；记录处理器的 pattern 写成 `\<^prop>‹x::bool›`；期望里 `"a = b"` 改 `"(a::nat) = b"`（单独读进来是 `'a`）；第 6 条 `∀i. P (f i)` 拆出的定理期望从 `P (f ?x1)` 改为 `P (f ?x)`（我从最终规则抄错了编号，最终规则经 `RS Eq_TrueI` 才变成 `?x1`）。另让检查失败时打印实际值。**2026-11-18 02:53 UTC 测试 session 全部通过**（第 6 节第 1–16 条），feature 代码仍是 `94c1377`。已通知 concept A1。测试的这些修正已提交（`c730caa`，已推 origin）。
+- 作者「全部都做」（提交、第 17 条开销、第 19 条变异检查）。第 17 条【实测，2026-11-18 03:15–03:40 UTC】：stock 树构建了 HOL；基准 session `ai-artifacts/bench/`（不提交）在两棵树上交替各跑两次、每次三轮，测四组负载的 CPU 时间。机器同时有别的会话在构建（load 13–18），轮与轮之间波动 ±20% 以上；六轮里取最快的一轮，feature ÷ stock：带 connective 的前提 0.89，原子前提 0.92，不带前提 1.05，`add_simps` 76 条规则 0.82。结论：在这个噪声水平下看不出额外开销。HOL 整体构建时间两棵树负载不同，不可比。
+- 第 19 条变异检查【实测，2026-11-18 03:20–07:30 UTC】：20 个变异（第 6 节第 19 条列的那些，`clear_simpset` 拆成全留、全清两个），每个改一处源码、重建 HOL 与测试 session、再恢复成 `94c1377`。**20 个全部被测试抓到**（测试 session 报 FAILED，Pure、HOL 都构建通过）。M12（合并直接用 `Net.merge`）第一次跑时 HOL 里 `List.thy:3951` 的 `smt` 证明在高负载下超时，与变异无关（HOL 内部合并的两边都是同样的四个处理器，plain merge 结果相同）；单独重跑后被第 11 条抓到。每个变异第一条失败的检查：M01 第 2 条；M02、M03 第 12 条；M04 第 2 条；M05 第 7 条；M06、M08、M09 第 8 条；M07 第 6 条；M10 第 4 条；M11 第 2 条；M12、M13 第 11 条；M14 第 16 条；M15 第 14 条；M16 第 5 条；M17 HOL 处理器一节；M18、M19、M20 第 2 条。最后按 `94c1377` 重建，测试通过，私有树干净。脚本与日志在会话 scratchpad，不提交。
+- 第十五批的判据改动【实测，2026-11-18 07:35–08:35 UTC】：`simproc_can_use_thm` 改为只认"假设 h"本身的前提，注释、README、本计划 4.4、4.6、第 6 节第 2、19 条随之改；第 2 条加两项检查（`prems_of` 里有一条命题相同的已证定理时，登记在化简前提自身时仍不能用；端到端地，查判据的版本不留假设）。Pure、HOL、测试 session 构建通过。M18–M20 对准新代码重跑，加 M21（旧判据）：4 个都被抓到，M21 由新加的检查抓到。**未提交**。
 - 作者「于此同时你可以提交，push，并通知 concept A1 rebase」：私有树提交 `94c1377` 已推 origin；feature 仓库注册提交 `adf8396`（作者批准的 18 个新文件：打包 9 个、测试 8 个、本计划）已推 origin main；已通知 concept A1，它已按 SKILL 3.7 把 base 改成 generic_mksimps（私有树快进到 94c1377，它那边的推送交作者处理），等测试通过的通知。
 
 **本会话不碰 concept 的任何文件**（`CONCEPT_UNARY_PLAN.md`、`CONCEPT_OWN_TYPE_PLAN.md`、`CONCEPT_INSTANCE_CONTEXT_PLAN.md`、`CONCEPT_TAT_NOTES.md`、`contrib/concept`），它们归另一个 fork。要告诉 concept 的内容在 4.8，评审通过后再发（作者第九批）。
@@ -215,7 +219,9 @@ fun extract_rews {sym} thm ctxt =
 
 另外两行实测：乱序模式下 `P a ⟹ P c ⟹ R` 化简前提 `P c` 时也是对称的结果；顺序模式下 `P a ⟹ R` 化简前提 `P a` 自己时，上下文里什么都没记（先化简、后收）。HOL 证条件用的 `asm_simp_tac` 不化简前提，simproc 在前提上没有触发。
 
-**判据**：一条登记此刻能不能用，等于问"它的每个假设，是不是此刻 `Simplifier.prems_of ctxt` 里某条前提的命题"。上表最后一列全部符合这个判据。本 feature 提供这个判据的函数 `simproc_can_use_thm`（4.6）【已定：作者第八、九批；名字是作者提议、我赞同】。
+**判据**：一条登记此刻能不能用，等于问"它的每个假设 h，此刻 `Simplifier.prems_of ctxt` 里是不是有一条前提假设了 h，即这条前提的命题是 h、并且 h 在它自己的假设里"。上表最后一列全部符合这个判据。本 feature 提供这个判据的函数 `simproc_can_use_thm`（4.6）【已定：作者第八、九批；名字是作者提议、我赞同；"并且 h 在它自己的假设里"是第十五批加的】。
+
+**为什么要"h 在它自己的假设里"**（concept B 2026-11-18 转来，作者第十五批采用）：`prems_of` 里不只有 simplifier 收进来的前提（`rules_of_prem` 用 `Thm.assume_hyps` 得到，以自己为假设），还可能有别的代码用 `Simplifier.add_prems` 放进去的已证定理，它们不带假设（HOL 里有：`HOL/Tools/lin_arith.ML:874` 的 `add_arith_facts`、`HOL/Analysis/measurable.ML:223`、`HOL/Real_Asymp/multiseries_expansion.ML:277`）。原来只比命题时，一条已证定理的命题碰巧与登记的假设相同，登记就被判为能用，用了之后留下消不掉的假设。concept B 在 stock 上模拟实测：先 `add_prems` 已证的 `group K`，化简 `group K ⟹ Q K`，乱序模式下化简前提自身时它的登记通过了旧判据，结果报 "Undeclared hyps"。新判据只认"假设 h"本身；嵌套化简时 `add_prems` 带进去的是外层收进来的前提，仍然满足。
 
 **不加"顺序模式 / 乱序模式"参数【已定：第九批】**：同一个判据在两种模式下都对；在同一次化简之内，顺序模式下它恒为真。作者要求**在注释里明确写明这些陷阱**（4.6 列出注释必须写的内容）。
 
@@ -285,7 +291,7 @@ val simproc_can_use_thm: Proof.context -> thm -> bool
 
 - **`mksimps_context`** 是整套分派（4.2），供处理器递归用，类型与槽位相同（定理在前、上下文在后），可以直接用于 `fold_map`。名字照上游的约定：`set_mksimps` 不带上下文、`set_mksimps_context` 带上下文；`mksimps` 与 `mksimps_context` 同理。
 - **`kept_by_clear_simpset`** 是必填字段，没有隐含的默认值，每个登记者都得明说。concept A1 曾建议"默认清掉"；做成必填，就不需要默认值。
-- **`simproc_can_use_thm ctxt th`**：`th` 的每个假设，都是 `Simplifier.prems_of ctxt`（`:490`）里某条定理的命题（`aconv`）时为真。不带假设的定理恒为真。
+- **`simproc_can_use_thm ctxt th`**：`th` 的每个假设 h，`Simplifier.prems_of ctxt`（`:490`）里都有一条定理，它的命题是 h（`aconv`）、并且 h 在它自己的假设里时为真；`add_prems` 放进去的已证定理不算（第十五批，见 4.4）。不带假设的定理恒为真。
 - **处理器的参数顺序**照需求 1（上下文在前），不改。
 
 **注释必须写明的陷阱【已定：作者第九批要求写清】。** `add_mksimps_handler` 和 `simproc_can_use_thm` 的注释写明下面这些，不靠读者自己推：
@@ -293,7 +299,7 @@ val simproc_can_use_thm: Proof.context -> thm -> bool
 1. pattern 是命题，带 `Trueprop`；像 simproc 的 lhs 一样用自由变量写（`\<^prop>‹group x›`，`\<^prop>` 不接受 `?x`）；登记时，没被登记上下文固定的自由变量、没被它声明的类型变量都变成 unknown，被固定的保持不变；但登记上下文在证明体内时（`Variable.is_body`），没固定的自由变量和它们类型里的类型变量原样留下（4.2），所以要从 theory 或 local theory 的上下文登记。pattern 与定理做过 `Variable.gen_all` 之后的结论比较；处理器拿到的是做过 `Variable.gen_all` 的整条定理，可能带前提、带 unknown；它的 maxidx 是准的，恰好在不带（类型）unknown 时为 −1，所以可以用 `Thm.maxidx_of th >= 0` 判断带不带 unknown。
 2. 返回 `SOME` 就负责这条定理的全部规则，槽位不再运行；要保留默认规则，自己调 `get_mksimps_context ctxt th ctxt`。返回 `NONE` 时，对上下文的改动一并丢弃。槽位不查表：HOL 的槽位自己拆 `∧`、`∀`、`⟶`、`If`，拆出的部分不会再经过别的处理器。所以只有定理不再往下拆时才该直接调槽位；还要让各部分经过别的处理器的，自己拆开，对每个更小的定理调 `mksimps_context`（第 5 条）。
 3. 第一个返回 `SOME` 的处理器之后，优先级更低的候选不会被调用。优先级是任意整数，高的先调；HOL 的四个处理器是 0，要排在它们前面用正数，排在后面用负数；同为 0 时按名字的字典序。
-4. `kept_by_clear_simpset`：`clear_simpset` 只保留填 `true` 的处理器。`simp only:` 和带定理参数的 `simplified` attribute 都用 `clear_simpset`，用户期望那里只有他列出的规则和前提。所以只有"不让产出的规则比槽位多"的处理器才应填 `true`（HOL 的四个、只登记前提的 concept）；会额外推出规则的处理器应填 `false`。`empty_simpset` 不看这个标记，总是清空全部。
+4. `kept_by_clear_simpset`：`clear_simpset` 只保留填 `true` 的处理器。`simp only:` 和带定理参数的 `simplified` attribute 都用 `clear_simpset`，用户期望那里只有他列出的规则和前提。所以只有"不让产出的规则比槽位多"的处理器才应填 `true`（HOL 的四个；只登记前提的 concept 原也填 `true`，后来因自己的加载顺序改为 `false`，见本节末）；会额外推出规则的处理器应填 `false`。`empty_simpset` 不看这个标记，总是清空全部。
 5. 递归只对更小的定理调 `mksimps_context`，否则死循环。
 6. 显式加规则的路径（`simp add:`、`[simp]`、`add_simps`、`del_simps`、`mksimps`）也会调用处理器，但对上下文的改动被丢弃；`del_simps` 也调用它，所以同一条定理必须给出同一组规则。
 7. **收前提时写进上下文的东西，在乱序模式（`simp` 默认、`auto`、`clarsimp`）下，化简这条前提自己的时候、它被改写之后、以及最后重新拼合 `P ⟹ C` 的时候，都还看得见，但这时它不能用。** 凡是从这类登记里取定理来用的代码（simproc、solver、loop、subgoaler），都必须先用 `simproc_can_use_thm` 检查。在同一次化简之内，顺序模式下检查恒为真，所以不必区分模式。
@@ -334,6 +340,7 @@ fn ctxt => fn th =>
 - `empty_simpset` 清空全部是要紧的：三处故意不拆前提的槽位（`function_elims.ML:48`、`quotient_tacs.ML:38`、`hypsubst.ML:148`）都写成 `Simplifier.empty_simpset ctxt |> Simplifier.set_mksimps …`。表清空了，它们才不受 HOL 的 connective 处理器影响。
 - `clear_simpset` 只留标记为 `true` 的，是为了 `simp only:` 的含义：用户期望只有他列出的规则和前提；会额外推出规则的处理器不该悄悄留在那里（陷阱第 4 条）。
 - concept 的 selector Simpset 是由 `clear_simpset` 造的（另一个 fork 的 `MLML/ai-artifacts/CONCEPT_UNARY_PLAN.md:396`，2026-11-17 读到的）。concept 的处理器填 `true`，就会留在里面；HOL 的四个也填 `true`，所以 concept 的处理器在那里同样看得到 connective 里面的部分。这正是 concept A1 转来这个配置的原因：定义实例时"祖先实例成立"作为前提 cut 进来，selector Simpset 里条件 `concept t` 要靠它消掉。
+  - **后来的变化（concept B 2026-11-18 转来，作者在 concept 的 B 区评审 B3 之后定的）**：concept 只登记一个处理器，pattern `Trueprop ?P`，优先级取负数（让 HOL 的四个先拆），头不是 concept 谓词时返回 `NONE`；`kept_by_clear_simpset = false`，因为 selector Simpset 的初值在 concept 的类型层加载时就算好了（那时还没有 concept，`clear_simpset` 留不下它），改由 concept 的包在加载时把这个处理器同时加进 theory 的 simpset 和 selector Simpset。上面一段与 4.6 陷阱第 4 条、4.8 第 5 条里"concept 的处理器填 `true`"随之过时；HOL 的四个仍是 `true`。这是 concept 的用法，不改本 feature 的设计。
 
 不提供 Isar 层的命令或 attribute，不做 morphism 变换（simproc 的 `Morphism.entity` 那一套）：第一个使用者在 theory 层按常量登记，用不到。以后要再加。
 
@@ -376,6 +383,7 @@ fn ctxt => fn th =>
    - **端到端**：一个使用登记的 simproc，在 `Q x` 处用记下的 `P x` 和一条固定引理把 `Q x` 改写成 `True`；分"先查 `simproc_can_use_thm`"和"不查"两个版本，在表的各行和 `P a ∧ Q a ⟹ R` 上分别用 `asm_full_rewrite`、`asm_lr_rewrite` 跑。查的版本：结果定理 `Thm.hyps_of` 为空，能用的那几行确实改写了。不查的版本：在 4.4 的时刻 1、2，结果带着消不掉的假设。另用一条预期失败的 lemma 确认一次 "Undeclared hyps"。这一条实测 4.4 那张表的最后一列。
    - **区分对错判据的情形**：乱序模式 `P a ∧ R b ⟹ R'`，`HOL.conj` 拆出的登记 `P a` 的假设是 `P a ∧ R b`（不是 `P a`），在结论里能用，化简这条前提自己时不能用；乱序模式 `P a ⟹ P c ⟹ R`，一条同时带两个假设的定理，化简 `P a` 时不能用，在结论里能用；不带假设的定理总能用。
    - **嵌套化简**（4.6 陷阱第 9 条）：在结论里换上 `clear_simpset` 造的 simpset 后，判据对外层登记为假；`add_prems` 外层的 `prems_of` 之后为真。
+   - **已证定理不算前提**（第十五批）：先 `add_prems` 一条命题与登记的假设相同的已证定理，登记在化简前提自身时仍判为不能用；端到端地，查判据的版本不留假设。
 4. **校正 maxidx**（复审 N1）：处理器记下收到定理的 `Thm.maxidx_of`；前提 `P a ∧ R b` 拆出的 `P a` 必须是 −1。`Main` 下用 4.6 示意里 concept 处理器的判断（`Thm.maxidx_of th >= 0` 就返回 `NONE`），前提 `P a ∧ R b` 和 `(P a ∧ R b) ∧ P c` 的每个合取支都被登记。
 5. **pattern 的一般化**（复审 N2）：用 `\<^prop>` 和自由变量，在一个带类型变量的常量上登记处理器（如 `finite A`）；它必须在具体类型的前提（`finite (S :: nat set)`）、类型变量名不同的前提、`simp add:` 的多态定理上都被调用。登记上下文里固定的变量保持固定：在 `fix x` 的局部上下文里登记 `P x`，只匹配那个 `x`。
 3. **处理器负责全部结果**：返回 `SOME ([], …)` 时 `P a ≡ True` 不在规则里；返回 `SOME`（槽位的规则）时在；返回 `NONE` 时由槽位产出。
@@ -392,7 +400,7 @@ fn ctxt => fn th =>
 16. **`mksimps` 走分派**：处理器返回 `SOME ([], …)` 时 `Simplifier.mksimps` 给出 `[]`。
 17. **开销**：`Main` 的默认 simpset 下 `simp` 一组基准（含许多合取、全称、蕴含前提的）的耗时与 stock 树对比。
 18. **整体回归**：构建 `HOL`（作者下令）。AutoCorres2 不作为本 feature 的验收条件（作者第七批：先不管）。
-19. **变异检查作用于测试本身**，下列每个错误实现都应有测试失败：分派换成直接调槽位；不管 `NONE` 只调第一个候选；不按优先级（用 Net 的顺序）；丢掉返回的上下文；命中后仍调槽位；把做过 `Variable.gen_all` 的定理交给槽位；匹配整个命题而不是结论；匹配前不做 `Variable.gen_all`；交给处理器的是没做 `Variable.gen_all` 的定理；交给处理器前不校正 maxidx；登记时不一般化 pattern；合并直接用 `Net.merge`；合并留第二个 simpset 的版本；`mksimps` 绕过分派；`clear_simpset` 不看标记（全留或全清）；HOL 的四个处理器标成 `false`；`simproc_can_use_thm` 恒为真；`simproc_can_use_thm` 只要有一个假设在就算；`simproc_can_use_thm` 看定理的命题而不是假设。（草稿里"`NONE` 时不丢弃上下文的改动"这个变异写不出来，已删，复审 N7。）
+19. **变异检查作用于测试本身**，下列每个错误实现都应有测试失败：分派换成直接调槽位；不管 `NONE` 只调第一个候选；不按优先级（用 Net 的顺序）；丢掉返回的上下文；命中后仍调槽位；把做过 `Variable.gen_all` 的定理交给槽位；匹配整个命题而不是结论；匹配前不做 `Variable.gen_all`；交给处理器的是没做 `Variable.gen_all` 的定理；交给处理器前不校正 maxidx；登记时不一般化 pattern；合并直接用 `Net.merge`；合并留第二个 simpset 的版本；`mksimps` 绕过分派；`clear_simpset` 不看标记（全留或全清）；HOL 的四个处理器标成 `false`；`simproc_can_use_thm` 恒为真；`simproc_can_use_thm` 只要有一个假设在就算；`simproc_can_use_thm` 看定理的命题而不是假设；`simproc_can_use_thm` 把 `add_prems` 放进去的已证定理也算作前提（第十五批之前的判据）。（草稿里"`NONE` 时不丢弃上下文的改动"这个变异写不出来，已删，复审 N7。）
 
 ## 7. 作为补丁式 feature【照 SKILL `isabelle-patch-feature` 3.6】
 

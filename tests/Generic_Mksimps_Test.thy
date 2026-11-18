@@ -279,6 +279,13 @@ in
     (firings sequential "P a \<and> R b \<Longrightarrow> P c",
       [("P a", [], []), ("P c", [("R b", true), ("P a", true)], ["P a \<and> R b"])]);
 
+  (*a proved fact in prems_of stating the hypothesis does not make a registration usable*)
+  val _ = check_firings "2: mutual, conjunction, a proved fact stating it" ctxt
+    (#1 (observe (Simplifier.add_prems [mk_thm ctxt "P a \<and> R b"] ctxt) mutual [] []
+        "P a \<and> R b \<Longrightarrow> P c"),
+      [("P a", [("R b", false), ("P a", false)], ["P a \<and> R b"]),
+       ("P c", [("R b", true), ("P a", true)], ["P a \<and> R b", "P a \<and> R b"])]);
+
   (*a theorem with two hypotheses; a theorem without hypotheses; nested simplification*)
   val mutual_firings = firings mutual P_a_c_d;
   val _ = check "2: two hypotheses"
@@ -322,6 +329,12 @@ in
     [true, false] |> List.app (fn checked =>
       check_result "2: moment 2, sequential" ctxt
         (result sequential checked P_P2 "P a \<Longrightarrow> Q a", "P2 a \<Longrightarrow> Q a", []));
+
+  (*moment 1 with a proved fact stating the premise in prems_of*)
+  val _ = check_result "2: moment 1, mutual, checked, a proved fact stating the premise" ctxt
+    (#2 (observe (Simplifier.add_prems [mk_thm ctxt "P a \<and> Q a"] ctxt) mutual [uses_P true] []
+        "P a \<and> Q a \<Longrightarrow> R d"),
+     "P a \<and> Q a \<Longrightarrow> R d", []);
 
   (*the simp method fails on the hypothesis left behind*)
   fun prove checked s =
