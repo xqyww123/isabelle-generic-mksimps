@@ -143,7 +143,7 @@ structure Firing_Log = Proof_Data
 );
 
 val add_record_handler =
-  add_handler "test.record" {patterns = [\<^prop>\<open>x\<close>], priority = ~10, kept = true}
+  add_handler "test.record" {patterns = [\<^prop>\<open>x::bool\<close>], priority = ~10, kept = true}
     record_and_default_rules;
 
 fun firing_of ctxt ct : firing =
@@ -204,18 +204,26 @@ fun observe ctxt conv procs simps s =
 val mutual = Simplifier.asm_full_rewrite;
 val sequential = Simplifier.asm_lr_rewrite;
 
+fun string_of_firing ctxt ({at, records, prems, ...}: firing) =
+  plain ctxt at ^ ": recorded [" ^
+  commas (map (fn (t, b) => plain ctxt t ^ (if b then " usable" else " unusable")) records) ^
+  "], prems_of [" ^ commas (map (plain ctxt) prems) ^ "]";
+
 (*expected: (at, [(record, usable)], prems_of) for each firing*)
 fun check_firings name ctxt (firings: firing list, expected) =
-  check name
-    (eq_list (fn ({at, records, prems, ...}: firing, (at', records', prems')) =>
+  check_showing name (fn () => cat_lines (map (string_of_firing ctxt) firings))
+    (ListPair.allEq (fn ({at, records, prems, ...}: firing, (at', records', prems')) =>
         at aconv read_term ctxt at' andalso
-        eq_list (fn ((t, b), (s, b')) => t aconv read_prop ctxt s andalso b = b')
+        ListPair.allEq (fn ((t, b), (s, b')) => t aconv read_prop ctxt s andalso b = b')
           (records, records') andalso
         eq_props (prems, map (read_prop ctxt) prems'))
       (firings, expected));
 
 fun check_result name ctxt (res, rhs, hyps) =
-  check name
+  check_showing name
+    (fn () =>
+      "rhs " ^ plain ctxt (Thm.term_of (Thm.rhs_of res)) ^
+      ", hyps [" ^ commas (map (plain ctxt) (Thm.hyps_of res)) ^ "]")
     (Thm.term_of (Thm.rhs_of res) aconv read_prop ctxt rhs andalso
       eq_props (Thm.hyps_of res, map (read_prop ctxt) hyps));
 \<close>
@@ -232,7 +240,7 @@ in
     (firings mutual "P a \<Longrightarrow> R d", [("P a", [("P a", false)], [])]);
   val _ = check_firings "2: mutual, P a rewritten to P b" ctxt
     (firings mutual "a = b \<Longrightarrow> P a \<Longrightarrow> R d",
-      [("P b", [("P a", false), ("a = b", true)], ["a = b"])]);
+      [("P b", [("P a", false), ("(a::nat) = b", true)], ["(a::nat) = b"])]);
   val _ = check_firings "2: mutual, P a and P c" ctxt
     (firings mutual "P a \<Longrightarrow> P c \<Longrightarrow> R d",
       [("P a", [("P c", true), ("P a", false)], ["P c"]),
@@ -245,7 +253,8 @@ in
   val _ = check_firings "2: sequential, P a simplified itself" ctxt
     (firings sequential "P a \<Longrightarrow> R d", [("P a", [], [])]);
   val _ = check_firings "2: sequential, P a rewritten to P b" ctxt
-    (firings sequential "a = b \<Longrightarrow> P a \<Longrightarrow> R d", [("P b", [("a = b", true)], ["a = b"])]);
+    (firings sequential "a = b \<Longrightarrow> P a \<Longrightarrow> R d",
+      [("P b", [("(a::nat) = b", true)], ["(a::nat) = b"])]);
   val _ = check_firings "2: sequential, P a and P c, conclusion" ctxt
     (firings sequential P_a_c_d,
       [("P a", [], []),
@@ -419,7 +428,7 @@ ML \<open>
 val recursion_inputs =
  [("P a \<and> R b", ["P a"]),
   ("(P a \<and> R b) \<and> P c", ["P a", "P c"]),
-  ("\<forall>i. P (f i)", ["P (f ?x1)"]),
+  ("\<forall>i. P (f i)", ["P (f ?x)"]),
   ("R b \<longrightarrow> P a", ["R b \<Longrightarrow> P a"]),
   ("if C then P a else R b", ["C \<Longrightarrow> P a"])];
 

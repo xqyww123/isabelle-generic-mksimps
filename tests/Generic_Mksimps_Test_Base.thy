@@ -21,6 +21,12 @@ lemma P2_6: "P2 6" by (simp add: P2_def)
 ML \<open>
 fun check name b = if b then () else error ("Failed check: " ^ name);
 
+(*a failing check also shows what it got*)
+fun check_showing name shown b =
+  if b then () else error ("Failed check: " ^ name ^ "\n" ^ shown ());
+
+fun plain ctxt t = Print_Mode.setmp [] (fn () => Syntax.string_of_term ctxt t) ();
+
 fun read_prop ctxt = Syntax.read_prop (Proof_Context.set_mode Proof_Context.mode_schematic ctxt);
 fun read_term ctxt = Syntax.read_term (Proof_Context.set_mode Proof_Context.mode_schematic ctxt);
 
@@ -33,7 +39,9 @@ fun assume_prop ctxt s = Thm.assume (Thm.cterm_of ctxt (Syntax.read_prop ctxt s)
 fun eq_props (ts, us) = eq_list (op aconv) (ts, us);
 fun eq_prop_sets (ts, us) = eq_set (op aconv) (ts, us);
 
-fun check_props name ctxt (ts, ss) = check name (eq_props (ts, map (read_prop ctxt) ss));
+fun check_props name ctxt (ts, ss) =
+  check_showing name (fn () => commas (map (plain ctxt) ts))
+    (eq_props (ts, map (read_prop ctxt) ss));
 
 (*the rules the dispatch gives*)
 fun rules ctxt th = map Thm.prop_of (#1 (Simplifier.mksimps_context th ctxt));
