@@ -2,6 +2,9 @@
 
 标记：【已定】作者已批；【提案】我的建议，未批，不能当作基线；【实测】跑过；【读源码】只读了源码。行号指本 feature 的私有树 `worktrees/Isabelle2026-generic_mksimps/src`，AFP 指 `contrib/afp-2026-10-26/thys`，phi-system 指 `MLML/contrib/phi-system`。作者原话对过会话转录。日期按 UTC。文中"作者"指项目所有者。
 
+【2026-11-22 加的指路】本 feature 另带第二样东西：simplifier 的步数上限（作者 2026-11-22 13:33 UTC 定做进本 feature，不另开 feature）。
+它的方案单独放在同目录的 `SIMP_STEP_LIMIT_PLAN.md`，由会话"simplifier 限步数"写和维护；本文件其余部分不涉及它。
+
 用语（全文只用这几个词）：
 
 - **槽位**：simpset 里现有的那一个函数 `mk`，类型 `thm -> Proof.context -> thm list * Proof.context`，由 `set_mksimps`、`set_mksimps_context` 设置，`get_mksimps_context` 读出。一个 simpset 只有一个。HOL 的槽位是 `Simpdata.mksimps mksimps_pairs`。作者称它 default process、the default mksimp。
