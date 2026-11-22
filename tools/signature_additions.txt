@@ -6,3 +6,9 @@ src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val add_mksimps_handler
 src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val del_mksimps_handler
 src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val mksimps_context
 src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val simproc_can_use_thm
+src/Pure/simp_steps.ML SIMP_STEPS exception EXCEEDED
+src/Pure/simp_steps.ML SIMP_STEPS val limited
+src/Pure/simp_steps.ML SIMP_STEPS val step
+src/Pure/simp_steps.ML SIMP_STEPS val charge
+src/Pure/simp_steps.ML SIMP_STEPS val count
+src/Pure/simp_steps.ML SIMP_STEPS val inherit

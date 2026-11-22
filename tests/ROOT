@@ -4,10 +4,12 @@
 session Generic_Mksimps_Test = HOL +
   description "
     Checks of mksimps handlers: dispatch, premise visibility, HOL's connective handlers, names,
-    clearing and merging.  Any failing check fails the build.
+    clearing and merging.  Checks of the bound on simplifier steps (Simp_Steps).  Any failing
+    check fails the build.
   "
   options [timeout = 600]
   theories
     Generic_Mksimps_Test
     Generic_Mksimps_Merge
     Generic_Mksimps_Merge_Swapped
+    Simp_Steps_Test

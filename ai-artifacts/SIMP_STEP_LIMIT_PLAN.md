@@ -1,10 +1,11 @@
 # simplifier 的步数上限（`generic_mksimps` 的一部分）：方案，第四稿
 
 会话"simplifier 限步数"写（它是从会话"concept B"fork 出来的）。
-状态：**第四稿（2026-11-22 15:53 UTC）；第四轮评审判"可以接受"，它的更正（F25 至 F27）已于 16:31 UTC 改入；作者 16:38「很好，批准开工」，实现进行中。**
-作者 16:39 另两句：对两个 REPL 探针「交给你自决了」；「提交方案」（本文件随即提交）。构建、代码的提交、推送、release 仍然每一步等他下令。
+状态：**第四稿（2026-11-22 15:53 UTC）；第四轮评审判"可以接受"，它的更正（F25 至 F27）已于 16:31 UTC 改入；作者 16:38「很好，批准开工」；代码、测试、清单、README 于 16:57 写完，17:10 构建通过，已提交（第 11 节）；代码评审在进行。**
+作者 16:39 另两句：对两个 REPL 探针「交给你自决了」；「提交方案」（本文件 16:40 提交为 `8b830b3`，没有推送）。构建、代码的提交、推送、release 仍然每一步等他下令。
+作者 17:03：「批准构建」「批准新文件提交」「请进行代码评审」。构建 17:04 起（私有树，session `Generic_Mksimps_Test`）；代码评审 17:05 起（`wf_c3226e55-994`）。结果记在第 11 节末尾。
 第 10 节列的十一项设计，作者还没有逐条看过。
-本文件里没有一行代码被编译或运行过。源码事实都是读源码得到的，行号以本 feature 的私有树
+第 2 至 6 节里的代码草稿与例子没有编译过；真正写下的代码与它们的出入、以及哪些已经验证过，见第 11 节。源码事实都是读源码得到的，行号以本 feature 的私有树
 `contrib/generic_mksimps/worktrees/Isabelle2026-generic_mksimps/src/`（提交 `1aa94bd`）为准，下面写路径时省去这一段。
 
 标法：
@@ -464,7 +465,73 @@ fun limited bound f ctxt =
     作者 13:07 已把这一处交给 fork 之前的会话自己定（当时列给他的"限步数的三处"之一）。
 11. **新的 Pure 文件**：计数的代码放新文件，`raw_simplifier.ML` 只改三行。
 
-## 11. 修订记录
+## 11. 实现记录（2026-11-22 16:41 至 16:57 UTC）
+
+作者 16:38「很好，批准开工」之后写的。下面"写了什么"到"补丁的开销"各段是 16:58 构建之前写的；构建与提交的结果在本节最后一段。推送还等作者下令。
+
+**写了什么**
+- 私有树（`worktrees/Isabelle2026-generic_mksimps`，未提交）：
+  - 新文件 `src/Pure/simp_steps.ML`，102 行（连文件头的说明；第 4 节估的"约 55 行"没有算文件头与注释）；
+  - `src/Pure/raw_simplifier.ML`：三个跟踪函数各加一次 `Simp_Steps.step ctxt`；
+  - `src/Pure/ROOT.ML`：在 `raw_simplifier.ML` 之前加 `ML_file "simp_steps.ML";`。
+- feature 仓库（未提交）：
+  - 新文件 `tests/Simp_Steps_Test.thy`（674 行），`tests/ROOT` 的 session `Generic_Mksimps_Test` 加上它；
+  - `tools/patched_files.txt` 加两行；`tools/signature_additions.txt` 加六行；`README.md` 加一节（英文）。
+  - `tools/patched_files.txt` 是手写的；照 SKILL 3.4 第 3 步，release 之前要在提交之后用 `git diff-tree` 重新生成并用 `check-signatures` 核对，这两件事现在做不了（它们只认提交）。
+
+**与第 4 节草稿的出入**（都不改变行为）
+- `exceeded` 这个函数改名为 `has_reached_bound`，与"到达了上限"这个词一致。
+- `raw_simplifier.ML` 的三行各折成两行，前面加一行注释 `(*each call is one step of Simp_Steps*)`，为的是不超过 80 列。
+
+**与第 8 节测试清单的出入**
+- 多了第 0 组：没有计数器时 `count` 是 `NONE`、`step` 与 `charge` 什么都不做；上限 0；计数从 0 起。
+- 多了一种独立的对照：测试 theory 自己装的 trace 钩子把 simplifier 报的每个事件记下来。
+  于是"计数 = 事件的个数"可以直接核对（用 `Main` 的 simpset，对测试 9 的 22 个项与另一个项），每一种步的测试也核对"那一种事件确实在里面"。
+- 第 1 组"规则的循环"用的是**一个**前提 `a = b ∧ b = a`，不是分开的两个前提。分开的两个前提会互相化简掉，不循环（16:57 在 stock 上试过：两个前提的那个目标正常结束，一个前提的那个 2 秒内不结束）。
+- 第 1 组每个不结束的例子都用同一个检查：上限 20，`limited` 交回 `NONE`，外面一层读到的恰好是 21，trace 钩子记下的恰好是 20 个事件。
+- 第 12 组的超时用 0.5 秒，不是约一秒。
+
+**构建之前已经验证的**（探针，在共用的树上，它现在就是没有任何 feature 的 Isabelle2026，提交 `7d475f7`；经 isabelle-mcp，session `HOL`）
+- `simp_steps.ML` 这个文件原样用 `ML_file` 载入，编译通过。
+- 补丁的三行用 trace 钩子模拟：每个钩子先调 `Simp_Steps.step`，位置与打了补丁的三个函数相同。在这个模拟之下，测试 theory 全文通过（最后一次是 16:57，用的是最终的文本）。
+- 生成探针的脚本与探针在 `ai-artifacts/probes/`（`make_simp_steps_probe.py`、`Simp_Steps_Probe.thy`），不提交。
+- **还没有验证的，只有构建能验证**：真正的那三行补丁；`ROOT.ML` 的那一行；`simp_steps.ML` 在 Pure 引导阶段（ML antiquotation 可用之前）的编译；
+  测试 theory 在私有树里、接在 `Generic_Mksimps_Test_Base` 之后的那一份。
+
+**变异检查**：把实现故意改错 8 种，各跑一遍测试，8 种都至少有一组测试失败（改错的文件都编译通过，失败的都是测试）。
+- 被拒绝的步不记在还有余地的计数器上（第三稿的做法）；
+- `limited` 结束时先看自己的计数器、再看外层；
+- `charge 0` 在已有计数器到达上限时不抛；
+- 运行结束时不把计数器结束掉；
+- `count` 读最外层的计数器；
+- 多放一步才拒绝；
+- 恰好走满上限的运行交回 `NONE`；
+- 补丁里 `trace_simproc` 那一行漏掉（在模拟里去掉那个钩子的 `step`）。
+- 没有试的两种：漏掉 `trace_invoke` 或 `trace_rrule` 那一行。那样测试里不结束的例子真的不会结束，探针会挂住；在真正的构建里它表现为测试 session 超时（600 秒）。
+
+**测试 9 的期望值**：16:51 在共用的树上用探针 `ai-artifacts/probes/Simp_Steps_Baseline_Probe.thy` 记下，22 个项，已作为字面量写进测试。
+
+**补丁的开销**（探针 `ai-artifacts/probes/Simp_Steps_Cost_Probe.thy`，16:54，只量了一次，机器负载约 1）
+- 没有计数器时一次 `step`：约 22 纳秒；有一个开着的计数器：约 30 纳秒；有三个：约 38 纳秒。
+- 一批 26 个项用 `Main` 的 simpset 各化简一遍是 3366 步；不打补丁时平均每步约 2460 纳秒。
+- 所以没有设上限时，补丁给化简本身增加约 0.9% 的时间；整个构建里化简只占一部分，比例更小。第 4 节的退路（每次运行只读一次槽）不需要。
+- 第 8 节那个要构建的开销探针（两棵树各构建一次 `HOL` 比 CPU 时间）没有做，要作者下令；照上面的数字，本会话认为不必做。
+
+**构建与提交**（作者 17:03：「批准构建」「批准新文件提交」「请进行代码评审」）
+- 构建：17:04 起、17:10 结束，退出码 0。命令（在 MLML 根目录，低优先级）：
+  `contrib/generic_mksimps/worktrees/Isabelle2026-generic_mksimps/bin/isabelle build -v -b -d contrib/generic_mksimps/tests Generic_Mksimps_Test`。
+  Pure 17 秒，HOL 6 分 09 秒，`Generic_Mksimps_Test` 5 秒（其中 `Simp_Steps_Test` 累计 1.3 秒）。
+  所以上面"只有构建能验证"的四样都过了：真正的三行补丁、`ROOT.ML` 的那一行、新文件在 Pure 引导阶段的编译、测试 theory 在私有树里的那一份。
+- 私有树的提交：`1b3a1ae`（17:11，分支 `Isabelle2026/generic_mksimps`，没有推送）。
+- 提交之后核对两个清单：
+  - `tools/patched_files.txt` 与 `git diff-tree -r --no-renames --name-only c105fb8 HEAD` 的输出相同。
+  - `isabelle-patch-control check-signatures` 退出码 1，报两处，**都在 `raw_simplifier.ML`、都是本次改动之前就有的**（对上一个头 `1aa94bd` 和当时的清单跑，报的完全相同）；`simp_steps.ML` 的六项没有报任何东西。
+    1. `dest_ss` 这一项的类型变了（mksimps 处理器那部分给它加了字段 `mksimps_handlers`，是作者当时批过的设计）；这个检查不允许 base 里已有的签名项改变。
+    2. `RAW_SIMPLIFIER` 签名里一段注释有一行以 `type variables not declared …` 开头（`:68`），检查工具把它当成了一项 `type`。
+    这两处会在 release 时挡住 `make-patches`，不属于步数上限这件事；怎样处理要作者定。
+- 代码评审：17:05 起（`wf_c3226e55-994`，题目 `simp_step_limit_code_review_brief_2026-11-22.md`，报告 `simp_step_limit_code_review_round1_2026-11-22.md`，都不提交）。结果回来后记在这里。
+
+## 12. 修订记录
 
 - 2026-11-22 13:20 UTC：初稿，作为单独的 feature `simp_step_limit`（文件当时在 `contrib/simp_step_limit/ai-artifacts/`）。
 - 13:33：作者定做进 `generic_mksimps`。14:22：第一轮评审出报告。14:23：文件搬到这里，`GENERIC_MKSIMPS_PLAN.md` 加了一句指路。
@@ -485,3 +552,7 @@ fun limited bound f ctxt =
   - F27：`charge k` 的说法里"一次走 k 步的填充"改成"一次记了 k 步的填充"（第 2 节与第 10 节第 10 项）。
   - `setmp` 的行号 `41-47` 改成 `41-48`。
 - 16:40：记下作者的三句话：16:38「很好，批准开工」；16:39 对两个 REPL 探针「交给你自决了」；16:39「提交方案」。状态行、第 7 节、第 8 节随之改。
+  同一分钟提交为 `8b830b3`（连同 `GENERIC_MKSIMPS_PLAN.md` 里那句指路），没有推送。
+- 16:58：加第 11 节"实现记录"（写了什么、与草稿和测试清单的出入、探针验证了什么与没有验证什么、变异检查、开销的数字）；原第 11 节"修订记录"改为第 12 节。状态行随之改。
+  这些是提交 `8b830b3` 之后的改动，随代码一起提交。
+- 17:12：第 11 节加"构建与提交"一段（构建通过；私有树提交 `1b3a1ae`；两个清单的核对，其中 `check-signatures` 报出两处本次改动之前就有的问题）；状态行记下作者 17:03 的三句话。

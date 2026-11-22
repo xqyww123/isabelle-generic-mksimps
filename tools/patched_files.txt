@@ -1,3 +1,5 @@
 src/HOL/Tools/simpdata.ML
+src/Pure/ROOT.ML
 src/Pure/raw_simplifier.ML
+src/Pure/simp_steps.ML
 src/Pure/simplifier.ML
