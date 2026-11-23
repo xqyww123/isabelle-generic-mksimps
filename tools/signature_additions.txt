@@ -1,11 +1,15 @@
 # Every signature entry generic_mksimps adds to an .ML file, as
 # `<path> <SIGNATURE NAME> <keyword> <name>` (check-signatures).
+# `changed`: an entry of the base that has another type here.  dest_ss gives one more field,
+# mksimps_handlers; the owner accepted it (2026-11-23).  Callers that select fields or match
+# with `...` are not affected; a record pattern that names all fields no longer compiles.
 src/Pure/raw_simplifier.ML RAW_SIMPLIFIER type mksimps_handler
 src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val make_mksimps_handler
 src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val add_mksimps_handler
 src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val del_mksimps_handler
 src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val mksimps_context
 src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val simproc_can_use_thm
+changed src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val dest_ss
 src/Pure/simp_steps.ML SIMP_STEPS exception EXCEEDED
 src/Pure/simp_steps.ML SIMP_STEPS val limited
 src/Pure/simp_steps.ML SIMP_STEPS val step

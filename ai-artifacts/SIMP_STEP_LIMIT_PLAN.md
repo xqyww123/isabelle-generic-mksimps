@@ -557,6 +557,23 @@ fun limited bound f ctxt =
   - 本会话对"要不要复审"的回答是不需要：实现本身（私有树的三个文件）在评审之后一行没有动；四处修改用的是裁判给的原文，裁判逐条写明不必再过一轮；
     functor 是裁判给的形状，只在测试里，已由这次构建与变异检查验证。
 
+**`check-signatures` 报的那两处旧问题的处理**（2026-11-23；作者 02:43：「接受 dest_ss 多了一个字段」；对注释那一处「请你自决，我倾向于改注释的断行，但允许你动那个仓库」；「现在就做」。02:44 至 02:51 做完；作者 02:52「下令提交，推送」，工具仓库的提交是 `485cb2a`，已推送）
+- 两处都改在检查工具里（`contrib/my_better_isabelle_prover`，`isabelle_patch_control/check_signatures.py`），本 feature 的 Isabelle 源码没有动，所以不用重建 Pure 与 HOL。
+- **`dest_ss`**：清单里可以写一行 `changed <path> <SIGNATURE NAME> <keyword> <name>`，声明 base 里的这一项在这里换了类型；声明了的不再算错。
+  - 清单仍然是精确的：声明了却没有改的会报 `listed as changed but not changed`；整个删掉的项不能声明，照旧报错。
+  - 本 feature 的 `tools/signature_additions.txt` 加了一行 `changed src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val dest_ss`，并在文件头注明是作者接受的。
+- **注释**：本会话没有照作者倾向的"改注释的断行"，而是修了工具，理由三条：
+  工具反正要为 `dest_ss` 改；改断行要重建 Pure 与 HOL，`concept` 的树合并之后也要再重建一次；修了工具，所有 feature 都不会再踩到。
+  - 工具现在在签名段里认得跨行的与嵌套的注释。顺带改了三处读法：签名段的 `end` 后面带注释也认；遇到下一个 `signature` 时把手上的一项归给前一个签名；文件结束时把手上的一项记下。
+- 验证：
+  - 本 feature：`check-signatures` 退出码 0，报"1 listed as changed, 12 additions as listed"。
+  - 本机七棵有清单的 feature 树，改之前与改之后各跑一遍：除了本 feature 少掉那一行误报之外，逐字相同。
+  - 新旧两种读法在 Isabelle2026 与 AFP 的 1464 个 `.ML` 文件上逐个比较：1447 个相同；17 个不同，都是旧读法读错的
+    （注释里以 `type`、`val` 开头的行被当成一项；老式文件里签名的 `end` 不在行首，项被归到了下一个签名）。
+  - 工具自己的测试：`tools/tests/test_signatures.sh` 加了跨行注释与 `changed` 的用例，28 条全过（旧的读法在新加的注释上会多读出三项，所以这条测试对旧工具会失败）；
+    另两个 toy 测试 92 条、116 条全过；`pytest` 198 条全过。
+- 工具自己的计划文件（`ai-artifacts/ISABELLE_PATCH_CONTROL_PLAN.md`）没有记这两处改动；作者 02:52：「工具自己的计划文件不用记这两处改动」。
+
 ## 12. 修订记录
 
 - 2026-11-22 13:20 UTC：初稿，作为单独的 feature `simp_step_limit`（文件当时在 `contrib/simp_step_limit/ai-artifacts/`）。
@@ -581,5 +598,6 @@ fun limited bound f ctxt =
   同一分钟提交为 `8b830b3`（连同 `GENERIC_MKSIMPS_PLAN.md` 里那句指路），没有推送。
 - 16:58：加第 11 节"实现记录"（写了什么、与草稿和测试清单的出入、探针验证了什么与没有验证什么、变异检查、开销的数字）；原第 11 节"修订记录"改为第 12 节。状态行随之改。
   这些是提交 `8b830b3` 之后的改动，随代码一起提交。
+- 2026-11-23 02:52：第 11 节加"`check-signatures` 报的那两处旧问题的处理"一段。
 - 2026-11-23 02:28：第 11 节加"照代码评审改的"一段（README 三处、测试 theory 三处、测试基座一处；探针与变异检查的结果）；此前 11-22 17:41 加了代码评审结果的几行。
 - 17:12：第 11 节加"构建与提交"一段（构建通过；私有树提交 `1b3a1ae`；两个清单的核对，其中 `check-signatures` 报出两处本次改动之前就有的问题）；状态行记下作者 17:03 的三句话。
