@@ -29,32 +29,16 @@ text \<open>The trace operations of this theory log each event into a variable c
   A refused step is not logged: \<open>Simp_Steps.step\<close> raises before the trace operation runs.\<close>
 
 ML \<open>
-structure Events = Proof_Data
-(
-  type T = string list Synchronized.var option;
-  fun init _ = NONE;
-);
-
-fun log_event event ctxt =
-  (case Events.get ctxt of
-    SOME var => Synchronized.change var (cons event)
-  | NONE => ());
-
-(*the result of f on ctxt with a fresh log, and the events logged meanwhile, in order*)
-fun logged f ctxt =
-  let
-    val var = Synchronized.var "events" [];
-    val x = f (Events.put (SOME var) ctxt);
-  in (x, rev (Synchronized.value var)) end;
+structure Events = Context_Log(type entry = string);
 \<close>
 
 setup \<open>
   Raw_Simplifier.set_trace_ops
-   {trace_invoke = fn _ => fn ctxt => (log_event "run" ctxt; ctxt),
+   {trace_invoke = fn _ => fn ctxt => (Events.log ctxt "run"; ctxt),
     trace_rrule = fn {unconditional, ...} => fn ctxt => fn cont =>
-      (log_event (if unconditional then "rule" else "conditional rule") ctxt; cont ctxt),
+      (Events.log ctxt (if unconditional then "rule" else "conditional rule"); cont ctxt),
     trace_simproc = fn {name, ...} => fn ctxt => fn cont =>
-      (log_event ("procedure " ^ name) ctxt; cont ctxt)}
+      (Events.log ctxt ("procedure " ^ name); cont ctxt)}
 \<close>
 
 
@@ -100,6 +84,13 @@ fun spin ctxt =
 (*rewriting that ends, with the simpset of the theory*)
 fun finite ctxt =
   ignore (Simplifier.rewrite ctxt \<^cterm>\<open>rev (rev [a, b, c, d::nat]) @ [e] = [a, b] @ us\<close>);
+
+(*the checks on a context kept from a bounded run that has ended*)
+fun check_closed name ctxt' =
+ (check (name ^ ": no counter") (Simp_Steps.count ctxt' = NONE);
+  steps 100 ctxt';
+  finite ctxt';
+  check (name ^ ": steps do not count") (Simp_Steps.count ctxt' = NONE));
 
 (*the cache of section 5 of the plan, with one entry: a miss runs fill in a bounded run and
   stores its result with the steps it counted; a hit charges them in a bounded run like it*)
@@ -148,7 +139,7 @@ local
   (*a run that does not end: under bound 20 it gives NONE, the counter outside holds 21 (the
     refused step counts once), 20 events were reported, kind among them*)
   fun check_refused name kind f =
-    let val ((e, n), events) = logged (counted (ending 20 f)) ctxt in
+    let val ((e, n), events) = Events.logged (counted (ending 20 f)) ctxt in
       check_showing ("1: " ^ name)
         (fn () => string_of_ending e ^ ", " ^ string_of_int n ^ " steps, events: " ^ commas events)
         (is_reached e andalso n = 21 andalso length events = 20 andalso
@@ -197,7 +188,7 @@ in
         SINGLE
           (simp_tac (put_simpset HOL_basic_ss ctxt' |> Simplifier.set_loop (fn _ => K all_tac)) 1)
           (Goal.init \<^cprop>\<open>never a\<close>);
-      val ((e, n), events) = logged (counted (ending 20 f)) ctxt;
+      val ((e, n), events) = Events.logged (counted (ending 20 f)) ctxt;
     in
       check_showing "1: a looper, stopped by the starts of runs alone"
         (fn () => string_of_ending e ^ ", " ^ string_of_int n ^ " steps, events: " ^ commas events)
@@ -208,7 +199,7 @@ in
   val _ =
     let
       val ((eq, n), events) =
-        logged (counted (fn ctxt' =>
+        Events.logged (counted (fn ctxt' =>
           Simplifier.rewrite (basic_ss @{thms never_ping_pong} ctxt') ct)) ctxt;
     in
       check_showing "1: a conditional rule whose condition fails"
@@ -254,7 +245,7 @@ local
   fun f ctxt' =
     ignore (Simplifier.rewrite (basic_ss [] ctxt' |> Simplifier.add_proc nested_run) \<^cterm>\<open>ping n\<close>);
 
-  val ((e, n), events) = logged (counted (ending 20 f)) ctxt;
+  val ((e, n), events) = Events.logged (counted (ending 20 f)) ctxt;
 in
   val _ =
     check_showing "2: the nested simplification reaches the caller's bound"
@@ -383,12 +374,9 @@ local
   val ctxt = \<^context>;
   val kept = Unsynchronized.ref NONE;
 
-  fun check_closed name =
+  fun check_kept name =
     let val ctxt' = the (! kept) in
-      check ("6: " ^ name ^ ": no counter") (Simp_Steps.count ctxt' = NONE);
-      steps 100 ctxt';
-      finite ctxt';
-      check ("6: " ^ name ^ ": steps do not count") (Simp_Steps.count ctxt' = NONE);
+      check_closed ("6: " ^ name) ctxt';
       check ("6: " ^ name ^ ": a new run counts from 0")
         (Simp_Steps.limited 10 (fn ctxt'' => (steps 2 ctxt''; Simp_Steps.count ctxt'')) ctxt' =
           SOME (SOME 2))
@@ -397,12 +385,12 @@ in
   val _ =
     check "6: a run within its bound"
       (Simp_Steps.limited 10 (fn ctxt' => kept := SOME ctxt') ctxt = SOME ());
-  val _ = check_closed "after a run within its bound";
+  val _ = check_kept "after a run within its bound";
 
   val _ =
     check "6: a run that reaches its bound"
       (Simp_Steps.limited 10 (fn ctxt' => (kept := SOME ctxt'; spin ctxt')) ctxt = NONE);
-  val _ = check_closed "after a run that reached its bound";
+  val _ = check_kept "after a run that reached its bound";
 end;
 \<close>
 
@@ -416,7 +404,7 @@ local
 in
   (*what is counted is what the simplifier reports, for the simpset of the theory*)
   val _ =
-    let val (((), n), events) = logged (counted finite) ctxt in
+    let val (((), n), events) = Events.logged (counted finite) ctxt in
       check_showing "7: the count is the number of reported events"
         (fn () => string_of_int n ^ " steps, events: " ^ commas events) (n = length events)
     end;
@@ -601,7 +589,7 @@ in
       let
         val eq = rewrite ctxt input;
         val bounded = Simp_Steps.limited 1000000 (fn ctxt' => rewrite ctxt' input) ctxt;
-        val ((_, n), events) = logged (counted (fn ctxt' => rewrite ctxt' input)) ctxt;
+        val ((_, n), events) = Events.logged (counted (fn ctxt' => rewrite ctxt' input)) ctxt;
       in
         check_showing ("9: " ^ input) (fn () => result eq) (result eq = expected);
         check ("10: " ^ input)
@@ -641,14 +629,6 @@ ML \<open>
 local
   val ctxt = \<^context>;
   val kept = Unsynchronized.ref NONE;
-
-  fun check_closed name =
-    let val ctxt' = the (! kept) in
-      check ("12: " ^ name ^ ": no counter") (Simp_Steps.count ctxt' = NONE);
-      steps 100 ctxt';
-      finite ctxt';
-      check ("12: " ^ name ^ ": steps do not count") (Simp_Steps.count ctxt' = NONE)
-    end;
 in
   (*a timeout is not turned into NONE*)
   val _ =
@@ -656,18 +636,21 @@ in
       ((ignore (Timeout.apply (Time.fromMilliseconds 500) (fn () =>
           Simp_Steps.limited 1000000000 (fn ctxt' => (kept := SOME ctxt'; spin ctxt')) ctxt) ());
         false) handle Timeout.TIMEOUT _ => true);
-  val _ = check_closed "after a timeout";
+  val _ = check_closed "12: after a timeout" (the (! kept));
 
+  (*raised after both counters have reached their bounds: the interrupt still passes*)
   val _ =
     check "12: an interrupt raised by the function passes"
       (case
         Exn.capture0 (fn () =>
-          Simp_Steps.limited 10
-            (fn ctxt' => (kept := SOME ctxt'; raise Exn.Interrupt_Break)) ctxt) ()
+          Simp_Steps.limited 10 (fn ctxt' =>
+            Simp_Steps.limited 10 (fn ctxt'' =>
+              (kept := SOME ctxt''; ignore (try spin ctxt''); raise Exn.Interrupt_Break)) ctxt')
+            ctxt) ()
        of
         Exn.Exn Exn.Interrupt_Break => true
       | _ => false);
-  val _ = check_closed "after an interrupt";
+  val _ = check_closed "12: after an interrupt" (the (! kept));
 end;
 \<close>
 

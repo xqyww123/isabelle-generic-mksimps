@@ -54,27 +54,42 @@ fun simpset_rules ctxt ths =
 fun handler_names ctxt = map #1 (#mksimps_handlers (Simplifier.dest_ss (Simplifier.simpset_of ctxt)));
 
 
-(* call log *)
+(* logs carried by the context *)
 
-(*Calls are logged into a variable carried by the context, so that checks running in parallel
-  theories do not share a log, and calls whose context changes are dropped are still seen.*)
-structure Call_Log = Proof_Data
+(*Entries are logged into a variable carried by the context, so that checks running in parallel
+  theories do not share a log, and entries whose context changes are dropped are still seen.*)
+functor Context_Log(type entry) =
+struct
+
+structure Data = Proof_Data
 (
-  type T = (string * thm) list Synchronized.var option;
+  type T = entry list Synchronized.var option;
   fun init _ = NONE;
 );
 
-fun log_call ctxt entry =
-  (case Call_Log.get ctxt of
+fun log ctxt entry =
+  (case Data.get ctxt of
     SOME var => Synchronized.change var (cons entry)
   | NONE => ());
 
-(*the calls logged while f runs on ctxt with a fresh log, in calling order*)
-fun calls_of f ctxt =
+(*the result of f on ctxt with a fresh log, and the entries logged meanwhile, in order*)
+fun logged f ctxt =
   let
-    val var = Synchronized.var "calls" [];
-    val _ = f (Call_Log.put (SOME var) ctxt);
-  in rev (Synchronized.value var) end;
+    val var = Synchronized.var "log" [];
+    val x = f (Data.put (SOME var) ctxt);
+  in (x, rev (Synchronized.value var)) end;
+
+end;
+
+
+(* call log *)
+
+structure Call_Log = Context_Log(type entry = string * thm);
+
+val log_call = Call_Log.log;
+
+(*the calls logged while f runs on ctxt with a fresh log, in calling order*)
+fun calls_of f ctxt = #2 (Call_Log.logged f ctxt);
 
 fun call_names (calls: (string * thm) list) = map #1 calls;
 fun call_props (calls: (string * thm) list) = map (Thm.prop_of o #2) calls;

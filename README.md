@@ -84,11 +84,11 @@ Simp_Steps.count : Proof.context -> int option
 Simp_Steps.inherit : Proof.context -> Proof.context -> Proof.context
 ```
 
-`limited N f ctxt` runs `f` with at most `N` simplifier steps. It gives `f` a context that carries
-a new *step counter* with bound `N`, in front of the counters that `ctxt` carries already (those
-of the enclosing `limited` calls). The simplifier counts each step on every counter of its
-context. There is no option and no Isar syntax: the bound comes from the caller, and on a context
-without a counter the simplifier works exactly as before.
+`limited N f ctxt` (`N ≥ 0`) runs `f` with at most `N` simplifier steps. It gives `f` a context
+that carries a new *step counter* with bound `N`, in front of the counters that `ctxt` carries
+already (those of the enclosing `limited` calls). The simplifier counts each step on every counter
+of its context. There is no option and no Isar syntax: the bound comes from the caller, and on a
+context without a counter the simplifier works exactly as before.
 
 ```ML
 (*ct simplified, or left as it is when that takes more than 10000 steps*)
@@ -140,15 +140,17 @@ its counter. With the same `N` everywhere, a nested `limited N` never returns `N
 - `count ctxt` is the count of the innermost counter, or `NONE` outside every `limited`. Read at
   the end of `f` on the context `f` received, it is what this run counted.
 - `step ctxt` counts one step, as the simplifier does.
-- `charge k ctxt` counts `k` steps at once, up to the first refused one. If a counter has already
-  reached its bound it raises `EXCEEDED` and counts nothing, also for `k = 0`.
+- `charge k ctxt` (`k ≥ 0`) counts `k` steps at once, up to the first refused one. If a counter has
+  already reached its bound it raises `EXCEEDED` and counts nothing, also for `k = 0`.
 - `inherit from to` puts the counters of `from` on `to`.
 
 ### Rules for callers
 
 - **Only the work done before `f` returns is bounded.** The result sequence of a tactic, a closure
   or a `Lazy` value that simplifies after `f` has returned is neither counted nor bounded. Take
-  the first result of a tactic inside `f`, with `SINGLE`.
+  the first result of a tactic inside `f`, with `SINGLE`. A `Lazy` value whose evaluation raises
+  `EXCEEDED` keeps that as its result: every later `Lazy.force` raises `EXCEEDED` again, also
+  outside every `limited`.
 - **Simplify on a context that carries the counter**: the context `f` receives, a context derived
   from it, or, for a context made afresh, `Simp_Steps.inherit ctxt' (Proof_Context.init_global thy)`
   where `ctxt'` is the context `f` received. Steps on any other context (one made afresh without
@@ -184,10 +186,11 @@ its counter. With the same `N` everywhere, a nested `limited N` never returns `N
 ### What is not bounded
 
 - A single ML procedure that does not return: the body of a simproc or congruence procedure, a
-  solver, a looper, a mksimps function or handler, a term order.
-- A congruence rule without premises that keeps changing the term while premises simplify each
-  other (the mode of `asm_full_simp_tac`): no step is made. Isabelle without this package loops
-  there too.
+  solver, a looper, a mksimps function or handler, a term order, and the prover of conditions and
+  congruence premises (in the simp tactics, the subgoaler), apart from the runs it starts.
+- A congruence rule that keeps changing the term without starting a run (it has no premises, or a
+  prover that is not a simp tactic proves them) while premises simplify each other (the mode of
+  `asm_full_simp_tac`): no step is made. Isabelle without this package loops there too.
 - The cost of one step: terms may grow, so `N` steps are not a bound on time or memory.
 - Rewriting outside the simplifier (`Pattern.rewrite_term`, loops of `Conv` combinators).
 
