@@ -75,6 +75,8 @@
 - 第 19 条变异检查【实测，2026-11-18 03:20–07:30 UTC】：20 个变异（第 6 节第 19 条列的那些，`clear_simpset` 拆成全留、全清两个），每个改一处源码、重建 HOL 与测试 session、再恢复成 `94c1377`。**20 个全部被测试抓到**（测试 session 报 FAILED，Pure、HOL 都构建通过）。M12（合并直接用 `Net.merge`）第一次跑时 HOL 里 `List.thy:3951` 的 `smt` 证明在高负载下超时，与变异无关（HOL 内部合并的两边都是同样的四个处理器，plain merge 结果相同）；单独重跑后被第 11 条抓到。每个变异第一条失败的检查：M01 第 2 条；M02、M03 第 12 条；M04 第 2 条；M05 第 7 条；M06、M08、M09 第 8 条；M07 第 6 条；M10 第 4 条；M11 第 2 条；M12、M13 第 11 条；M14 第 16 条；M15 第 14 条；M16 第 5 条；M17 HOL 处理器一节；M18、M19、M20 第 2 条。最后按 `94c1377` 重建，测试通过，私有树干净。脚本与日志在会话 scratchpad，不提交。
 - 第十五批的判据改动【实测，2026-11-18 07:35–08:35 UTC】：`simproc_can_use_thm` 改为只认"假设 h"本身的前提，注释、README、本计划 4.4、4.6、第 6 节第 2、19 条随之改；第 2 条加两项检查（`prems_of` 里有一条命题相同的已证定理时，登记在化简前提自身时仍不能用；端到端地，查判据的版本不留假设）。Pure、HOL、测试 session 构建通过。M18–M20 对准新代码重跑，加 M21（旧判据）：4 个都被抓到，M21 由新加的检查抓到。**未提交**。
 - 作者「于此同时你可以提交，push，并通知 concept A1 rebase」：私有树提交 `94c1377` 已推 origin；feature 仓库注册提交 `adf8396`（作者批准的 18 个新文件：打包 9 个、测试 8 个、本计划）已推 origin main；已通知 concept A1，它已按 SKILL 3.7 把 base 改成 generic_mksimps（私有树快进到 94c1377，它那边的推送交作者处理），等测试通过的通知。
+- 2026-11-28，会话 concept A1 加了两个接口：`assumed_prems`、`reset_simp_depth`（4.6）。测试在 `tests/Generic_Mksimps_Test.thy`：第 2 节多四项 `assumed_prems` 的检查，末尾一节"The simp depth is reset"（不编号）。
+  私有树的 Pure、HOL 与测试 session 构建通过；代码评审一个 Opus agent，结论"改几处措辞与测试后可接受"，已照改。
 
 **本会话不碰 concept 的任何文件**（`CONCEPT_UNARY_PLAN.md`、`CONCEPT_OWN_TYPE_PLAN.md`、`CONCEPT_INSTANCE_CONTEXT_PLAN.md`、`CONCEPT_TAT_NOTES.md`、`contrib/concept`），它们归另一个 fork。要告诉 concept 的内容在 4.8，评审通过后再发（作者第九批）。
 
@@ -293,6 +295,8 @@ val add_mksimps_handler: string (*name*) * mksimps_handler -> Proof.context -> P
 val del_mksimps_handler: string (*name*) -> Proof.context -> Proof.context
 val mksimps_context: thm -> Proof.context -> thm list * Proof.context
 val simproc_can_use_thm: Proof.context -> thm -> bool
+val assumed_prems: Proof.context -> thm list
+val reset_simp_depth: Proof.context -> Proof.context
 ```
 
 来源：`add`、`del` 是作者第三批逐字给的；`make_mksimps_handler` 的 `option` 是第五批，`priority` 字段是第六批（作者选了我提的"整数优先级"那一种），`kept_by_clear_simpset` 字段是第十批（作者确认加这个配置；字段名是我提的）；`mksimps_context` 这个名字作者在第三批用过，类型与槽位相同（第 8 节，第十批批准）；`simproc_can_use_thm` 的名字是作者第九批提议、我赞同。
@@ -300,6 +304,16 @@ val simproc_can_use_thm: Proof.context -> thm -> bool
 - **`mksimps_context`** 是整套分派（4.2），供处理器递归用，类型与槽位相同（定理在前、上下文在后），可以直接用于 `fold_map`。名字照上游的约定：`set_mksimps` 不带上下文、`set_mksimps_context` 带上下文；`mksimps` 与 `mksimps_context` 同理。
 - **`kept_by_clear_simpset`** 是必填字段，没有隐含的默认值，每个登记者都得明说。concept A1 曾建议"默认清掉"；做成必填，就不需要默认值。
 - **`simproc_can_use_thm ctxt th`**：`th` 的每个假设 h，`Simplifier.prems_of ctxt`（`:490`）里都有一条定理，它的命题是 h（`aconv`）、并且 h 在它自己的假设里时为真；`add_prems` 放进去的已证定理不算（第十五批，见 4.4）。不带假设的定理恒为真。
+- **`assumed_prems ctxt`**（2026-11-28 加，会话 concept A1）：`Simplifier.prems_of ctxt` 里"假设的就是它自己的命题"的那些前提，作为定理，次序同 `prems_of`；
+  也就是 `simproc_can_use_thm` 认的那些，后者改成定义在它上面，行为不变。`add_prems` 放进去的已证定理不在其中。
+  来由：concept 的搜索要的正是这份清单，此前照抄了定义（`concept_search.ML` 的 `local_prems`），而且它消条件时要的是定理本身。
+  作者 2026-11-28 12:59 UTC 对 concept A1（造轮子审查判给他的第 1 条）：「赞同，你 run an Opus agent 去做，做完以后你检查一遍，然后启动评审，通过后提交 push，然后 concept feature 这里 rebase」。
+- **`reset_simp_depth ctxt`**（2026-11-28 加，会话 concept A1）：`ctxt`，它的 simpset 回到化简深度 0，并换一个新的"超出"标记（那个标记只管 `simp_trace_depth_limit` 的那句提示）。
+  一份 simpset 带着取它的那次化简的深度；在另一次化简里面用它再起一次化简，深度接着数，`simp_depth_limit`（只在 `rewritec` 对带条件的规则检查）留给它的层数就少，上限调低时可能一层都不留。
+  重置之后，`simp_depth_limit` 把它当作在外面启动的。步数计数器（`Simp_Steps`）在上下文里、不在 simpset 里，照旧计它的步。
+  代价：`simp_depth_limit` 不再截断经过它的递归；在里面再启动它的代码要自己停。
+  没有现成的函数能做到：`clear_simpset` 保留深度，`merge_ss` 取大的那个，`empty_simpset`、`init_simpset` 丢掉内容。
+  来由：concept 消条件时用的 simpset 取自调用处，可能在一次化简的深处；作者 2026-11-28 12:59 UTC 对 concept A1：「你自决吧，但一定要深思，如有需要 run Opus agents」，concept A1 定为重置（一个只读的 Opus agent 的分析与它一致）。
 - **处理器的参数顺序**照需求 1（上下文在前），不改。
 
 **注释必须写明的陷阱【已定：作者第九批要求写清】。** `add_mksimps_handler` 和 `simproc_can_use_thm` 的注释写明下面这些，不靠读者自己推：
@@ -392,6 +406,8 @@ fn ctxt => fn th =>
    - **端到端**：一个使用登记的 simproc，在 `Q x` 处用记下的 `P x` 和一条固定引理把 `Q x` 改写成 `True`；分"先查 `simproc_can_use_thm`"和"不查"两个版本，在表的各行和 `P a ∧ Q a ⟹ R` 上分别用 `asm_full_rewrite`、`asm_lr_rewrite` 跑。查的版本：结果定理 `Thm.hyps_of` 为空，能用的那几行确实改写了。不查的版本：在 4.4 的时刻 1、2，结果带着消不掉的假设。另用一条预期失败的 lemma 确认一次 "Undeclared hyps"。这一条实测 4.4 那张表的最后一列。
    - **区分对错判据的情形**：乱序模式 `P a ∧ R b ⟹ R'`，`HOL.conj` 拆出的登记 `P a` 的假设是 `P a ∧ R b`（不是 `P a`），在结论里能用，化简这条前提自己时不能用；乱序模式 `P a ⟹ P c ⟹ R`，一条同时带两个假设的定理，化简 `P a` 时不能用，在结论里能用；不带假设的定理总能用。
    - **嵌套化简**（4.6 陷阱第 9 条）：在结论里换上 `clear_simpset` 造的 simpset 后，判据对外层登记为假；`add_prems` 外层的 `prems_of` 之后为真。
+   - **`assumed_prems`**（2026-11-28 加）：乱序与顺序两种模式下 `P a ⟹ P c ⟹ P d` 各处交回的前提与次序；`prems_of` 里另有一条命题相同的已证定理时不交回它；
+     `add_prems` 放进去的、假设不是它自己命题的定理（`P a`，假设是 `P a ∧ R b`）不交回。每条交回的定理都核对"它的假设恰好是它自己的命题"。
    - **已证定理不算前提**（第十五批）：先 `add_prems` 一条命题与登记的假设相同的已证定理，登记在化简前提自身时仍判为不能用；端到端地，查判据的版本不留假设。
 4. **校正 maxidx**（复审 N1）：处理器记下收到定理的 `Thm.maxidx_of`；前提 `P a ∧ R b` 拆出的 `P a` 必须是 −1。`Main` 下用 4.6 示意里 concept 处理器的判断（`Thm.maxidx_of th >= 0` 就返回 `NONE`），前提 `P a ∧ R b` 和 `(P a ∧ R b) ∧ P c` 的每个合取支都被登记。
 5. **pattern 的一般化**（复审 N2）：用 `\<^prop>` 和自由变量，在一个带类型变量的常量上登记处理器（如 `finite A`）；它必须在具体类型的前提（`finite (S :: nat set)`）、类型变量名不同的前提、`simp add:` 的多态定理上都被调用。登记上下文里固定的变量保持固定：在 `fix x` 的局部上下文里登记 `P x`，只匹配那个 `x`。
@@ -410,6 +426,10 @@ fn ctxt => fn th =>
 17. **开销**：`Main` 的默认 simpset 下 `simp` 一组基准（含许多合取、全称、蕴含前提的）的耗时与 stock 树对比。
 18. **整体回归**：构建 `HOL`（作者下令）。AutoCorres2 不作为本 feature 的验收条件（作者第七批：先不管）。
 19. **变异检查作用于测试本身**，下列每个错误实现都应有测试失败：分派换成直接调槽位；不管 `NONE` 只调第一个候选；不按优先级（用 Net 的顺序）；丢掉返回的上下文；命中后仍调槽位；把做过 `Variable.gen_all` 的定理交给槽位；匹配整个命题而不是结论；匹配前不做 `Variable.gen_all`；交给处理器的是没做 `Variable.gen_all` 的定理；交给处理器前不校正 maxidx；登记时不一般化 pattern；合并直接用 `Net.merge`；合并留第二个 simpset 的版本；`mksimps` 绕过分派；`clear_simpset` 不看标记（全留或全清）；HOL 的四个处理器标成 `false`；`simproc_can_use_thm` 恒为真；`simproc_can_use_thm` 只要有一个假设在就算；`simproc_can_use_thm` 看定理的命题而不是假设；`simproc_can_use_thm` 把 `add_prems` 放进去的已证定理也算作前提（第十五批之前的判据）。（草稿里"`NONE` 时不丢弃上下文的改动"这个变异写不出来，已删，复审 N7。）
+    - 2026-11-28 加的两个接口，测试照评审者的推演应当抓住的错误实现（没有往 Pure 里装错误实现实跑：每个要重建一次 Pure 与 HOL）：
+      `assumed_prems` 交回全部 `prems_of`；什么都不交回；次序反了；交回命题相同的已证定理；把带任何假设的前提都算上。
+      `reset_simp_depth` 什么都不做；重置到 1 以上；按相对量减 1；重置成负数；丢掉改写规则。
+      抓不住、明知留着的：保留旧的"超出"标记（只影响 trace 的那句提示）；丢掉前提清单。
 
 ## 7. 作为补丁式 feature【照 SKILL `isabelle-patch-feature` 3.6】
 

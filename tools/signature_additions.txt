@@ -9,6 +9,8 @@ src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val add_mksimps_handler
 src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val del_mksimps_handler
 src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val mksimps_context
 src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val simproc_can_use_thm
+src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val assumed_prems
+src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val reset_simp_depth
 changed src/Pure/raw_simplifier.ML RAW_SIMPLIFIER val dest_ss
 src/Pure/simp_steps.ML SIMP_STEPS exception EXCEEDED
 src/Pure/simp_steps.ML SIMP_STEPS val limited

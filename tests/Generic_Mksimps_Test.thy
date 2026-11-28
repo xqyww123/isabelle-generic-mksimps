@@ -132,6 +132,7 @@ type firing =
   records: (term * bool) list,  (*proposition, simproc_can_use_thm*)
   record_hyps: term list list,
   prems: term list,
+  assumed: thm list,  (*assumed_prems*)
   nested: (bool * bool) list,  (*simproc_can_use_thm after clear_simpset, then add_prems*)
   pair_a_c: bool option,  (*simproc_can_use_thm of the records P a, P c joined*)
   no_hyps: bool};
@@ -163,6 +164,7 @@ fun firing_of ctxt ct : firing =
     records = map (fn r => (Thm.prop_of r, can ctxt r)) recorded,
     record_hyps = map Thm.hyps_of recorded,
     prems = map Thm.prop_of prems,
+    assumed = Simplifier.assumed_prems ctxt,
     nested = map (fn r => (can nested_ctxt r, can nested_prems_ctxt r)) recorded,
     pair_a_c = pair_a_c,
     no_hyps = can ctxt @{thm TrueI}}
@@ -235,6 +237,22 @@ local
   val ctxt = \<^context>;
   fun firings conv s = #1 (observe ctxt conv [] [] s);
   val P_a_c_d = "P a \<Longrightarrow> P c \<Longrightarrow> P d";
+
+  (*expected: for each firing, the propositions of assumed_prems in order; each must be its
+    theorem's only hypothesis*)
+  fun check_assumed name observed expected =
+    let
+      fun shown ({assumed, ...}: firing) =
+        commas (assumed |> map (fn th =>
+          plain ctxt (Thm.prop_of th) ^ " [" ^ commas (map (plain ctxt) (Thm.hyps_of th)) ^ "]"));
+      fun assumes (th, s) =
+        let val t = read_prop ctxt s
+        in eq_props (Thm.prop_of th :: Thm.hyps_of th, [t, t]) end;
+    in
+      check_showing name (fn () => cat_lines (map shown observed))
+        (ListPair.allEq (fn ({assumed, ...}: firing, ss) => ListPair.allEq assumes (assumed, ss))
+          (observed, expected))
+    end;
 in
   val _ = check_firings "2: mutual, P a simplified itself" ctxt
     (firings mutual "P a \<Longrightarrow> R d", [("P a", [("P a", false)], [])]);
@@ -280,9 +298,11 @@ in
       [("P a", [], []), ("P c", [("R b", true), ("P a", true)], ["P a \<and> R b"])]);
 
   (*a proved fact in prems_of stating the hypothesis does not make a registration usable*)
+  val proved_fact_firings =
+    #1 (observe (Simplifier.add_prems [mk_thm ctxt "P a \<and> R b"] ctxt) mutual [] []
+      "P a \<and> R b \<Longrightarrow> P c");
   val _ = check_firings "2: mutual, conjunction, a proved fact stating it" ctxt
-    (#1 (observe (Simplifier.add_prems [mk_thm ctxt "P a \<and> R b"] ctxt) mutual [] []
-        "P a \<and> R b \<Longrightarrow> P c"),
+    (proved_fact_firings,
       [("P a", [("R b", false), ("P a", false)], ["P a \<and> R b"]),
        ("P c", [("R b", true), ("P a", true)], ["P a \<and> R b", "P a \<and> R b"])]);
 
@@ -293,6 +313,20 @@ in
   val _ = check "2: no hypotheses" (forall #no_hyps mutual_firings);
   val _ = check "2: nested simplification"
     (#nested (List.last mutual_firings) = [(false, true), (false, true)]);
+
+  (*assumed_prems: the assumed premises in the order of prems_of, not a proved fact*)
+  val _ = check_assumed "2: assumed_prems, mutual" mutual_firings
+    [["P c"], ["P a"], ["P a", "P c"]];
+  val _ = check_assumed "2: assumed_prems, sequential" (firings sequential P_a_c_d)
+    [[], ["P a"], ["P c", "P a"]];
+  val _ = check_assumed "2: assumed_prems, a proved fact stating a premise" proved_fact_firings
+    [[], ["P a \<and> R b"]];
+  (*P a under the hypothesis P a \<and> R b assumes another proposition than its own*)
+  val _ = check_assumed "2: assumed_prems, a fact under another hypothesis"
+    (#1 (observe
+      (Simplifier.add_prems [@{thm conjunct1} OF [assume_prop ctxt "P a \<and> R b"]] ctxt)
+      mutual [] [] "P c \<Longrightarrow> P d"))
+    [[], ["P c"]];
 end
 \<close>
 
@@ -673,6 +707,54 @@ local
       no_rules;
 in
   val _ = check "16: mksimps" (null (Simplifier.mksimps ctxt (mk_thm ctxt "P a")));
+end
+\<close>
+
+
+section \<open>The simp depth is reset\<close>
+
+text \<open>A simplification started inside another one goes on from its depth: at depth 2 under
+  \<open>simp_depth_limit = 1\<close> it does not try the conditional rule \<open>P x \<Longrightarrow> Q x\<close>.  After
+  \<open>reset_simp_depth\<close> the limit treats it as one started outside, whatever the limit is.  (No
+  number: the plan's section 6 has no item for it.)\<close>
+
+ML \<open>
+local
+  val base =
+    \<^context> |> put_simpset HOL_basic_ss
+    |> Simplifier.add_simps [@{thm PQ}, mk_thm \<^context> "P 6"];
+  fun rewritten ctxt' = Thm.term_of (Thm.rhs_of (Simplifier.rewrite ctxt' \<^cterm>\<open>Q 6\<close>));
+  (*what a simplification started outside makes of Q 6, and what a simproc at simp depth 2
+    makes of it in the context that it is given, as it is and reset*)
+  fun observed limit =
+    let
+      val ctxt = Config.put Simplifier.simp_depth_limit limit base;
+      val inside = Unsynchronized.ref ([]: term list);
+      val record =
+        Simplifier.make_simproc ctxt
+         {name = "record", kind = Simplifier.Simproc, lhss = [\<^term>\<open>C\<close>],
+          proc = fn _ => fn ctxt' => fn _ =>
+            (inside := [rewritten ctxt', rewritten (Simplifier.reset_simp_depth ctxt')]; NONE),
+          identifier = []};
+      val deeper =
+        Simplifier.make_simproc ctxt
+         {name = "deeper", kind = Simplifier.Simproc, lhss = [\<^term>\<open>g 0\<close>],
+          proc = fn _ => fn ctxt' => fn _ => (Simplifier.rewrite ctxt' \<^cterm>\<open>C\<close>; NONE),
+          identifier = []};
+      val _ =
+        Simplifier.rewrite (ctxt |> Simplifier.add_proc record |> Simplifier.add_proc deeper)
+          \<^cterm>\<open>g 0\<close>;
+    in (rewritten ctxt, ! inside) end;
+  fun check_inside name (outside, inside) expected =
+    check_showing name (fn () => commas (map (plain base) (outside :: inside)))
+      (eq_props (outside :: inside, expected));
+in
+  (*outside, inside as it is, inside reset*)
+  val _ = check_inside "reset_simp_depth: limit 1" (observed 1)
+    [\<^term>\<open>True\<close>, \<^term>\<open>Q 6\<close>, \<^term>\<open>True\<close>];
+  (*the limit still holds after the reset: at depth 1 the rule is not tried under limit 0*)
+  val _ = check_inside "reset_simp_depth: limit 0" (observed 0)
+    [\<^term>\<open>Q 6\<close>, \<^term>\<open>Q 6\<close>, \<^term>\<open>Q 6\<close>];
 end
 \<close>
 

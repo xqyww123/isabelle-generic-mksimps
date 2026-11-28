@@ -15,9 +15,9 @@ theorem one step, as HOL's mksimps function does, and dispatches each part again
 `group x` also sees the `group G` inside a premise `group G ∧ x ∈ carrier G`. The rules HOL
 produces are the same as without this package.
 
-The package also carries a second, independent facility: ML code can run a piece of work under a
-bound on the number of simplifier steps (structure `Simp_Steps`, described in its own section
-below).
+The package also carries two independent facilities for ML code: a bound on the number of
+simplifier steps (structure `Simp_Steps`) and `Simplifier.reset_simp_depth`, each described in its
+own section below.
 
 This package changes Isabelle2026 only. It has no Isar syntax.
 
@@ -32,6 +32,7 @@ Simplifier.add_mksimps_handler : string * mksimps_handler -> Proof.context -> Pr
 Simplifier.del_mksimps_handler : string -> Proof.context -> Proof.context
 Simplifier.mksimps_context : thm -> Proof.context -> thm list * Proof.context
 Simplifier.simproc_can_use_thm : Proof.context -> thm -> bool
+Simplifier.assumed_prems : Proof.context -> thm list
 ```
 
 The same names are in `Raw_Simplifier`. `print_simpset` lists the handlers, and
@@ -70,8 +71,9 @@ premise `P` stays visible in the whole implication, but in the default mode of `
 when `P ⟹ C` is rebuilt. Code that takes theorems from such data checks them with
 `simproc_can_use_thm ctxt th`: every hypothesis of `th` is assumed by a premise the simplifier
 currently holds (a proved fact with the same statement, put there by `Simplifier.add_prems`, does
-not count). A nested simplification with another simpset has its own premises; add the outer ones with
-`Simplifier.add_prems` to keep them usable there.
+not count). `assumed_prems ctxt` gives those premises, the ones that assume their own statement, as
+theorems in the order of `Simplifier.prems_of ctxt`. A nested simplification with another simpset
+has its own premises; add the outer ones with `Simplifier.add_prems` to keep them usable there.
 
 ## A bound on the number of simplifier steps
 
@@ -198,6 +200,21 @@ its counter. With the same `N` everywhere, a nested `limited N` never returns `N
   runs it starts.
 - The cost of one step: terms may grow, so `N` steps are not a bound on time or memory.
 - Rewriting outside the simplifier (`Pattern.rewrite_term`, loops of `Conv` combinators).
+
+## A simplification that starts at depth 0 again
+
+```ML
+Simplifier.reset_simp_depth : Proof.context -> Proof.context
+```
+
+A simpset carries the depth of the simplification that it is taken from. A simplification started
+inside another one (by a simproc, a solver or a mksimps handler, with the context that it is
+given) goes on from that depth, so `simp_depth_limit` leaves it fewer nested conditional rules,
+and under a lowered limit possibly none, than the same simplification started outside.
+`reset_simp_depth ctxt` is `ctxt` with its simpset at depth 0 and a new flag for the tracing of
+`simp_trace_depth_limit`: `simp_depth_limit` treats a simplification with it as one started
+outside (open `Simp_Steps` counters still count its steps). `simp_depth_limit` no longer cuts a
+recursion through it; code that starts it again from inside must end by itself.
 
 ## Sources
 
