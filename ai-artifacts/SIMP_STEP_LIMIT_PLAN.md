@@ -132,7 +132,34 @@ val result: thm option option =
 
 接口**不**规定的：到达上限之后调用方做什么（原样交回输入、报错、打 warning）、N 取多少、要不要告诉用户。这些是调用方的事（第 9 节）。
 
-## 3. 什么算一步【本会话的设计；作者 14:25 对"一次化简的开始算不算一步"：「你可以自主设计」】
+## 3. 什么算一步
+
+**现行的定义【作者 2026-11-27 定，经会话 concept B2 问他、concept A1 核过原话】**：09:06 UTC「你先把这个步数改一下，改成实际发生作用的步数。现在就改，改完启 code 评审」；
+他在 concept B2 的对话里选了"改计数器本身"（全系统只有一种数法，selector Simpset 的 1000 步也变成发生作用的步）与"concept A1 改"，09:20 UTC「代码评审也交给 concept A1」；
+代码在 `generic_mksimps` 里，提交到这里再合并进 concept（作者在 concept A1 的对话里选的）。
+congruence rule 与 congproc 改了项的那一下也算一步：代码评审 2026-11-28 指出不算的话两条互换头的 [cong] 规则会一步不数地一直改下去，作者在 concept A1 的对话里选了"也数"。
+
+- **一步 = simplifier 对项做成的一次改动**，有两种：
+  - 一条规则的实例被用上了（规则是给定的，或是 simproc 交出来的；带条件的规则在条件证出之后）。数在 `rewritec` 里 `rews` 交回 `SOME` 的地方（`Pure/raw_simplifier.ML`）。
+    simproc 交出的规则经同一个 `rews`，所以 simproc 的改写只算一次，交回 `NONE` 的 simproc 不算。
+  - 一条 congruence rule 或一个 congproc 被套用、而且项变了。数在 `congc` 交回 `SOME` 的地方（项没变时它交回 `NONE`）。
+    一次标准的 congruence 套用（两边头相同，项靠前提里的改写变）因此在那些改写之外再记一步。
+- 证条件、证 congruence 前提时里面做成的改动在它们做成的地方算。三个跟踪函数恢复成 stock 的样子。β 化简不算：单靠 β 化简总会结束。
+- 计数在改动做成之后：被拒绝的那一步，它的改动已经算出来，随整次运行一起丢掉。
+- **拦得住的**：一切一直在改动项的化简。
+- **拦不住的**（整张清单；下面"以前的定义"那一段里的论证已不适用）：
+  - 带条件的规则一再试而条件证不出：只有 `simp_depth_limit` 截断，每层可有几条规则可试，次数可随深度成倍增长。
+  - 失败的 simproc：每次走到一个位置调一次，有限，但每次的开销不受管（例如证 `concept _` 条件时起的一次什么也没找到的搜索）。
+  - 一个不断造出子目标、而每个子目标都不做成改动的 looper：没有任何东西让它结束，与不设上限时一样（这正是以前把"一次运行的开始"也算一步的理由，第一轮评审第 7 条）。
+    selector Simpset 没有 looper，所以它的各个单元不受影响。
+  - 一个 ML 过程自己不返回（simproc、congproc 的函数体、solver、looper、mksimps 的函数与处理器、项序、证条件与证 congruence 前提的 prover），它自己起的化简里做成的改动除外。
+  - 一步本身的开销；不在带着计数器的 context 上做的化简；simplifier 之外的改写引擎。
+- 量过的（concept A1 2026-11-28，concept 的两套测试里 selector Simpset 的每个单元）：
+  - 以前的数法：类型层的测试 4085 个单元，中位数 1，p99 29，最大 703；搜索的测试 380 个单元，中位数 2，p99 29，最大 47。
+  - 现在的数法（规则的改写加 congruence 改了项，04:1x UTC 两棵树重建之后量的）：类型层 4014 个单元，中位数 0，p99 2，最大 9；搜索 380 个单元，中位数 0，p99 7，最大 9。
+  - 两种数法下碰到上限的单元相同，都是不断改写的那些。作者 2026-11-28 04:04 UTC 把 concept 的上限从 1000 降到 150（「selector Simpset 的上限要留，但降低到 150」）。
+
+**以前的定义（作者 2026-11-27 改掉；留作记录）【当时本会话的设计；作者 14:25 对"一次化简的开始算不算一步"：「你可以自主设计」】**
 
 **一步 = simplifier 调一次它的三个跟踪函数之一**：`trace_invoke`、`trace_rrule`、`trace_simproc`（`Pure/raw_simplifier.ML:1110-1112`）。全文件调用它们的只有五处：
 - 一次运行的开始（`rewrite_cterm`，`:1659`）；
@@ -179,13 +206,8 @@ val result: thm option option =
      simplifier 交给 simproc 的 context 是从自己的派生的，所以嵌套的 simproc 看得见同样的计数器。
    - "已结束"记在那个 ref 里（负数），这样所有派生出去的 context 同时看到。
    - 它在 ML antiquotation 可用之前加载，所以不用 antiquotation；里面没有任何 `concept` 或 mksimps 特有的东西。
-2. **`Pure/raw_simplifier.ML` 改三行**：三个包装函数的开头各加一次 `Simp_Steps.step ctxt`。
-
-   ```ML
-   fun trace_invoke args ctxt = (Simp_Steps.step ctxt; #trace_invoke (trace_ops ctxt) args ctxt);
-   fun trace_rrule args ctxt = (Simp_Steps.step ctxt; #trace_rrule (trace_ops ctxt) args ctxt);
-   fun trace_simproc args ctxt = (Simp_Steps.step ctxt; #trace_simproc (trace_ops ctxt) args ctxt);
-   ```
+2. **`Pure/raw_simplifier.ML` 改两处**【2026-11-27 起；以前是三个跟踪函数开头各加一次 `Simp_Steps.step ctxt`】：
+   `rewritec` 里 `rews` 交回 `SOME` 时、`congc` 交回 `SOME`（项变了）时各调一次 `Simp_Steps.step ctxt`（第 3 节）。三个跟踪函数是 stock 的样子。
 3. **`Pure/ROOT.ML` 加一行**：`ML_file "simp_steps.ML";`，放在 `ML_file "raw_simplifier.ML";`（`:204`）之前。
    它需要 `context.ML`（`:116`，提供 `Proof_Data`）、`General/exn.ML`（`ROOT0.ML:7`）、`Concurrent/unsynchronized.ML`（`ROOT.ML:30`）与 `General/integer.ML`（`ROOT.ML:48`），都在它之前加载。
 
@@ -257,7 +279,7 @@ fun limited bound f ctxt =
 
 **不打补丁的办法为什么不用**：见第 1 节"stock 为什么不够"的三条；另外，在 HOL 里用 `Hooks` 一类的钩子把计数挪到上层，要给每个 theory 的每一步多加一次分发，逻辑也分在两处。
 
-**升级 Isabelle 时**：重新套补丁，并核对"每一种步仍然只经过这三个包装函数"（congproc 就是近年的版本才有的调用处）。第 8 节按步的种类各有一条测试，漏掉的调用处会被它们查出来。
+**升级 Isabelle 时**：重新套补丁，并核对"每一次改写仍然经过 `rews`、每一次 congruence 套用仍然经过 `congc`"。第 8 节按步的种类各有一条测试，漏掉的地方会被它们查出来。
 
 ## 5. 调用方要守的规矩【本会话的设计】
 
@@ -344,7 +366,7 @@ fun limited bound f ctxt =
 ## 7. 作为 `generic_mksimps` 的一部分【已定，作者 13:33】
 
 - 代码进本 feature 的私有树 `worktrees/Isabelle2026-generic_mksimps`（分支 `Isabelle2026/generic_mksimps`，现在的头 `1aa94bd`，还没有 release 过）。作者 13:33「允许」本会话动它。
-- 本 feature 已经改 `Pure/raw_simplifier.ML`；这里改的三行在它的跟踪函数处（`:1110-1112`），与 mksimps 处理器的改动不相邻。
+- 本 feature 已经改 `Pure/raw_simplifier.ML`；这里改的两处在 `rewritec` 的 `rews` 与 `congc`（2026-11-27 以前是跟踪函数处），与 mksimps 处理器的改动不相邻。
 - 包里随之要改的：
   - `tools/patched_files.txt` 加 `src/Pure/simp_steps.ML` 与 `src/Pure/ROOT.ML`（照 SKILL 3.4 第 3 步重新生成）；
   - `tools/signature_additions.txt` 按它现有的格式给 `SIMP_STEPS` 的每一项加一行；
@@ -362,6 +384,9 @@ fun limited bound f ctxt =
    - 带条件的规则，条件靠化简来证；
    - 一个 congproc；
    - 一个不断造出子目标、子目标上一步不走的 looper（只靠"运行的开始"这一种步被拦住）。
+     【2026-11-27 起去掉：现行的定义下它拦不住（第 3 节），测试里留着会一直跑下去。另加：带条件的规则条件证不出时不算步；
+     每一种改动各恰好一步（simproc 的结果只算一次；条件由前提闭合、不做改写的带条件规则；改了项的 congproc 与 congruence rule）；不改项的 congproc 恰好 0 步；
+     靠前提里的一次改写改了项的标准 congruence rule 恰好 2 步。】
 2. 嵌套的 simproc 里起的化简，步子记在外层的计数器上：只在嵌套的化简里循环的例子，外层到达上限。
 3. 嵌套的 `limited`：
    - 里层的上限小：里层交回 `NONE`，外层接着跑并正常结束，外层的计数里含里层走的步和它被拒绝的那一步；
@@ -378,6 +403,7 @@ fun limited bound f ctxt =
 6. 运行结束后留下来的 context：`count` 是 `NONE`；在它上面化简不计数、不抛异常；在它上面再 `limited` 从 0 数起。
 7. `count` 与 `charge`：
    - 没有被拒绝时，量出的数等于实际走的步数；`charge` 记在每一层上；
+     【2026-11-27 起：测试的跟踪钩子在规则做成改写时多记一个"made"；量出的数不少于"made"的个数（congruence 套用另算）、少于报告的事件总数；第 9 节那批目标逐条这样查】
    - 在 `limited 1000` 里，一个已经走了 90 步的 `limited 100` 调 `charge 30`：抛 `EXCEEDED`，里层交回 `NONE`，外层的计数恰好多了 11；
    - 在 `limited 1000` 里，一个 `limited 10` 的 `f` 做 50 次化简、每次都包在 `try` 里：里层交回 `NONE`，外层的计数恰好多了 11（走了的 10 步和头一次被拒绝的那一步）；
    - 命中与不命中一样：一次填充，它的函数最后是一个会到达自己上限的 `limited 5`、填充接受它的 `NONE`；在函数末尾读出它的计数 k（是 6）。
@@ -399,9 +425,9 @@ fun limited bound f ctxt =
     - `f` 存下 context 后自己抛 `Exn.Interrupt_Break`：中断从 `limited` 出来，同样的两项检查成立。
 
 **探针**：
-- **补丁的开销**（是构建，要作者下令）：同一个大量用 `simp` 的 session（例如 `HOL`），机器空闲、`threads=1`，在不带这三行的树与带的树上各构建一次，比 CPU 时间。
+- **补丁的开销**（是构建，要作者下令）：同一个大量用 `simp` 的 session（例如 `HOL`），机器空闲、`threads=1`，在不带这处补丁（2026-11-27 起是两处计数）的树与带的树上各构建一次，比 CPU 时间。
 - 在那之前（REPL 里，不需要构建；作者 16:39「交给你自决了」）：读一百万次 `Proof_Data` 的槽要多久，对比普通 `simp` 平均一步要多久。
-- **N 取多少不是本设施的事**（第 9 节）。给调用方的提示：普通调用用多少步，不打补丁就能量：在草稿 theory 里用 `Raw_Simplifier.set_trace_ops` 装三个只计数的钩子，它们看到的事件恰好就是第 3 节的步。
+- **N 取多少不是本设施的事**（第 9 节）。给调用方的提示：普通调用用多少步，不打补丁就能量：在草稿 theory 里用 `Raw_Simplifier.set_trace_ops` 装三个只计数的钩子（2026-11-27 起它们看到的是尝试，不再恰好是第 3 节的步：步不多于钩子看到的规则事件里做成改写的那些、再加改了项的 congruence 套用）。
 
 ## 9. 与 `concept` 的分工
 
@@ -447,7 +473,7 @@ fun limited bound f ctxt =
 1. **嵌套的 `limited` 各有各的上限**（第 6 节）。作者 14:25：「这里我交给你设计了，我都能接受」。
    随之：每一步记在 context 带着的每个开着的计数器上，`charge k` 也一样；`count` 读的是最里层那个开着的计数器，所以在 `f` 的末尾读到的是这次运行自己的计数。
    `concept` 那边的决议 v7 要的是相反的设计（按 client 分计数器）；理由见第 9 节。concept B 15:54 已答复照本接口办，所以这一处不必请作者定。
-2. **什么算一步**（第 3 节）：simplifier 调一次三个跟踪函数之一，恰好是 trace 报告的事件。
+2. **什么算一步**（第 3 节）【2026-11-27 作者改成"做成的改动"，下面是以前的定义】：simplifier 调一次三个跟踪函数之一，恰好是 trace 报告的事件。
    带条件的规则试一次算一步，条件证不证得出都算；模式匹配得上的 simproc、congproc 调一次算一步，交回 `NONE` 也算，simproc 给出的规则被应用时再算一步；
    普通的 congruence rule 与 β 化简不算。其中"一次运行的开始也算一步"是作者 14:25 说「你可以自主设计」的那一处；v7 不算它，并把这件事留给 concept B（第 9 节）。
 3. **只看计数器来定结果**，连同它的后果：到达上限之后别的异常不会被看到（第 2、6 节）。
@@ -463,7 +489,7 @@ fun limited bound f ctxt =
     命中时这次 `charge` 要放在与填充相同的 `limited` 里做（同一个上限、同一个 context；第 5 节"缓存"），这是第四轮评审之后加的规矩。
     后者与作者 12:33 的话有一处出入：这些步这次并没有真走；它换来的是结果不随缓存冷热变。
     作者 13:07 已把这一处交给 fork 之前的会话自己定（当时列给他的"限步数的三处"之一）。
-11. **新的 Pure 文件**：计数的代码放新文件，`raw_simplifier.ML` 只改三行。
+11. **新的 Pure 文件**：计数的代码放新文件，`raw_simplifier.ML` 只改几行（2026-11-27 以前是三个跟踪函数，之后是 `rews` 与 `congc` 两处）。
 
 ## 11. 实现记录（2026-11-22 16:41 至 16:57 UTC）
 
@@ -601,3 +627,7 @@ fun limited bound f ctxt =
 - 2026-11-23 02:52：第 11 节加"`check-signatures` 报的那两处旧问题的处理"一段。
 - 2026-11-23 02:28：第 11 节加"照代码评审改的"一段（README 三处、测试 theory 三处、测试基座一处；探针与变异检查的结果）；此前 11-22 17:41 加了代码评审结果的几行。
 - 17:12：第 11 节加"构建与提交"一段（构建通过；私有树提交 `1b3a1ae`；两个清单的核对，其中 `check-signatures` 报出两处本次改动之前就有的问题）；状态行记下作者 17:03 的三句话。
+- 2026-11-28 03:13 UTC，concept A1：作者 2026-11-27 把"一步"改成"做成的一次改写"。第 3 节换成现行的定义（拦得住的、拦不住的、量过的数），以前的定义留作记录；
+  第 8 节的测试 1、7 记下随之改的地方（looper 那一条去掉，条件证不出的带条件规则不算步，量出的数是改写数）。
+- 2026-11-28 04:02 UTC，concept A1：代码评审（一个 Opus agent）之后：作者选 congruence rule 与 congproc 改了项也算一步；第 3 节重写成两种步与整张"拦不住的"清单；
+  第 4 节补丁、升级时的核对、第 7 节、第 8 节的探针与测试、第 10 节第 2 项里讲旧做法的句子改准或标为以前的定义。

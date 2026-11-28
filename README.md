@@ -105,14 +105,18 @@ val result: thm option option =
 
 ### What a step is
 
-A step is one of the events that the simplifier trace reports (`Raw_Simplifier.set_trace_ops`):
+A step is one change of the term that the simplifier has made:
 
-- the start of one run of the simplifier (`Raw_Simplifier.rewrite_cterm`; `simp`, `auto`,
-  `Simplifier.rewrite`, `unfold` all end there), also of a run that proves a condition or a
-  premise of a congruence rule, and of each run a looper's subgoals start;
-- one use of an unconditional rewrite rule;
-- one attempt of a conditional rewrite rule, whether or not its conditions get proved;
-- one call of a simproc or of a congruence procedure whose pattern matches.
+- an instance of a rewrite rule applied, whether the rule was given or made by a simproc; a
+  conditional rule once its conditions are proved;
+- a congruence rule or congruence procedure applied that changed the term.
+
+Changes made while a condition or a premise of a congruence rule is proved count where they are
+made, and the congruence rule they change counts one step more: one rewrite under `d` nested
+congruence rules counts `d + 1` steps. What changes nothing is no step: a conditional rule whose conditions fail, a simproc that
+gives nothing, a congruence rule that leaves the term as it is, the start of a run. A beta step is
+not counted either; beta reduction alone always ends. So a bound ends every simplification that
+keeps changing the term; what it does not end is listed under "What is not bounded".
 
 ### How steps are counted and refused
 
@@ -185,12 +189,13 @@ its counter. With the same `N` everywhere, a nested `limited N` never returns `N
 
 ### What is not bounded
 
+- Work that changes nothing: conditional rules whose conditions fail, again and again down to
+  `simp_depth_limit`; simprocs that fail, each call at its own cost; a looper that keeps making
+  subgoals on which nothing is changed, which nothing ends, as without this package.
 - A single ML procedure that does not return: the body of a simproc or congruence procedure, a
   solver, a looper, a mksimps function or handler, a term order, and the prover of conditions and
-  congruence premises (in the simp tactics, the subgoaler), apart from the runs it starts.
-- A congruence rule that keeps changing the term without starting a run (it has no premises, or a
-  prover that is not a simp tactic proves them) while premises simplify each other (the mode of
-  `asm_full_simp_tac`): no step is made. Isabelle without this package loops there too.
+  congruence premises (in the simp tactics, the subgoaler), apart from the changes made in the
+  runs it starts.
 - The cost of one step: terms may grow, so `N` steps are not a bound on time or memory.
 - Rewriting outside the simplifier (`Pattern.rewrite_term`, loops of `Conv` combinators).
 

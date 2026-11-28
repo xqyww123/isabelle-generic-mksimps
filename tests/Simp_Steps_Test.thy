@@ -21,12 +21,20 @@ lemma ping_grow: "ping x = ping (Suc x)" by (simp add: ping_def)
 lemma ok: "ok x" by (simp add: ok_def)
 lemma ok_ping_grow: "ok x \<Longrightarrow> ping x = ping (Suc x)" by (simp add: ping_def)
 lemma never_ping_pong: "never x \<Longrightarrow> ping x = pong x" by (simp add: ping_def pong_def)
+lemma ok_ping_zero: "ok x \<Longrightarrow> ping x = 0" by (simp add: ping_def)
+
+definition fc :: "nat \<Rightarrow> nat" where "fc x = 0"
+definition gc :: "nat \<Rightarrow> nat" where "gc x = 0"
+lemma fc_gc_cong: "x = y \<Longrightarrow> fc x = gc y" by (simp add: fc_def gc_def)
+lemma fc_cong: "x = y \<Longrightarrow> fc x = fc y" by simp
+lemma ping_zero: "ping x = 0" by (simp add: ping_def)
 
 
 section \<open>The events the simplifier reports\<close>
 
-text \<open>The trace operations of this theory log each event into a variable carried by the context.
-  A refused step is not logged: \<open>Simp_Steps.step\<close> raises before the trace operation runs.\<close>
+text \<open>The trace operations of this theory log each event into a variable carried by the context:
+  a rule is logged when it is tried, and once more as "made" when its rewrite is made.  A step
+  is counted once the rewrite is made, so a refused step is logged too.\<close>
 
 ML \<open>
 structure Events = Context_Log(type entry = string);
@@ -36,7 +44,8 @@ setup \<open>
   Raw_Simplifier.set_trace_ops
    {trace_invoke = fn _ => fn ctxt => (Events.log ctxt "run"; ctxt),
     trace_rrule = fn {unconditional, ...} => fn ctxt => fn cont =>
-      (Events.log ctxt (if unconditional then "rule" else "conditional rule"); cont ctxt),
+      (Events.log ctxt (if unconditional then "rule" else "conditional rule");
+       let val result = cont ctxt in (if is_some result then Events.log ctxt "made" else (); result) end),
     trace_simproc = fn {name, ...} => fn ctxt => fn cont =>
       (Events.log ctxt ("procedure " ^ name); cont ctxt)}
 \<close>
@@ -137,13 +146,12 @@ local
   val ct = \<^cterm>\<open>ping n\<close>;
 
   (*a run that does not end: under bound 20 it gives NONE, the counter outside holds 21 (the
-    refused step counts once), 20 events were reported, kind among them*)
+    refused step counts once), kind among the events*)
   fun check_refused name kind f =
     let val ((e, n), events) = Events.logged (counted (ending 20 f)) ctxt in
       check_showing ("1: " ^ name)
         (fn () => string_of_ending e ^ ", " ^ string_of_int n ^ " steps, events: " ^ commas events)
-        (is_reached e andalso n = 21 andalso length events = 20 andalso
-          member (op =) events kind)
+        (is_reached e andalso n = 21 andalso member (op =) events kind)
     end;
 
   val grow =
@@ -177,25 +185,61 @@ in
     check_refused "a conditional rule, its condition proved by simplification"
       "conditional rule" (rewrite_in o basic_ss @{thms ok ok_ping_grow});
 
+  (*a congruence procedure that changes nothing is no step: the steps come from the rules*)
   val _ =
-    check_refused "a congruence procedure" "procedure ping_cong"
+    check_refused "rules under a congruence procedure that changes nothing" "procedure ping_cong"
       (rewrite_in o Simplifier.add_proc ping_cong o basic_ss @{thms ping_pong pong_ping});
 
-  (*a looper that makes a subgoal on which no step is made: only the starts of runs count*)
-  val _ =
-    let
-      fun f ctxt' =
-        SINGLE
-          (simp_tac (put_simpset HOL_basic_ss ctxt' |> Simplifier.set_loop (fn _ => K all_tac)) 1)
-          (Goal.init \<^cprop>\<open>never a\<close>);
-      val ((e, n), events) = Events.logged (counted (ending 20 f)) ctxt;
-    in
-      check_showing "1: a looper, stopped by the starts of runs alone"
-        (fn () => string_of_ending e ^ ", " ^ string_of_int n ^ " steps, events: " ^ commas events)
-        (is_reached e andalso n = 21 andalso events = replicate 20 "run")
+  (*each kind of change counts exactly: a simproc's result once; a conditional rule whose
+    condition a premise closes, without a rewrite, once; a congruence procedure and a congruence
+    rule that change the term, whose premises take no rewrite, once each; a congruence procedure
+    that changes nothing, not at all; a congruence rule that changes the term by a rewrite in its
+    premise, once more than that rewrite*)
+  fun steps_exactly k name f =
+    let val ((_, n), events) = Events.logged (counted f) ctxt in
+      check_showing ("1: " ^ string_of_int k ^ " steps: " ^ name)
+        (fn () => string_of_int n ^ " steps, events: " ^ commas events) (n = k)
     end;
+  val one_step = steps_exactly 1;
+  val zero_proc =
+    Simplifier.make_simproc ctxt
+     {name = "zero", kind = Simplifier.Simproc, lhss = [\<^term>\<open>pong x\<close>],
+      proc = fn _ => fn _ => fn ct =>
+        SOME (Thm.instantiate' [] [SOME (Thm.dest_arg ct)] @{thm pong_def [THEN eq_reflection]}),
+      identifier = []};
+  val to_pong =
+    Simplifier.make_simproc ctxt
+     {name = "to_pong", kind = Simplifier.Congproc false, lhss = [\<^term>\<open>ping x\<close>],
+      proc = fn _ => fn _ => fn ct =>
+        SOME (Thm.instantiate' [] [SOME (Thm.dest_arg ct)] @{thm ping_pong [THEN eq_reflection]}),
+      identifier = []};
+  val _ =
+    one_step "a simproc's result"
+      (fn ctxt' =>
+        Simplifier.rewrite (basic_ss [] ctxt' |> Simplifier.add_proc zero_proc) \<^cterm>\<open>pong n\<close>);
+  val _ =
+    one_step "a conditional rule whose condition a premise closes"
+      (fn ctxt' =>
+        Simplifier.rewrite
+          (basic_ss @{thms ok_ping_zero} ctxt' |> Simplifier.add_prems @{thms ok}) ct);
+  val _ =
+    one_step "a congruence procedure that changes the term"
+      (fn ctxt' => Simplifier.rewrite (basic_ss [] ctxt' |> Simplifier.add_proc to_pong) ct);
+  val _ =
+    one_step "a congruence rule that changes the term"
+      (fn ctxt' =>
+        Simplifier.rewrite (basic_ss [] ctxt' |> Simplifier.add_cong @{thm fc_gc_cong})
+          \<^cterm>\<open>fc n\<close>);
+  val _ =
+    steps_exactly 0 "a congruence procedure that changes nothing"
+      (fn ctxt' => Simplifier.rewrite (basic_ss [] ctxt' |> Simplifier.add_proc ping_cong) ct);
+  val _ =
+    steps_exactly 2 "a congruence rule that changes the term by a rewrite in its premise"
+      (fn ctxt' =>
+        Simplifier.rewrite (basic_ss @{thms ping_zero} ctxt' |> Simplifier.add_cong @{thm fc_cong})
+          \<^cterm>\<open>fc (ping n)\<close>);
 
-  (*a conditional rule counts when its condition is not proved, too*)
+  (*a conditional rule whose condition is not proved makes no rewrite: no step*)
   val _ =
     let
       val ((eq, n), events) =
@@ -204,8 +248,7 @@ in
     in
       check_showing "1: a conditional rule whose condition fails"
         (fn () => string_of_int n ^ " steps, events: " ^ commas events)
-        (Thm.is_reflexive eq andalso n = length events andalso
-          member (op =) events "conditional rule")
+        (Thm.is_reflexive eq andalso n = 0 andalso member (op =) events "conditional rule")
     end;
 
   (*a run that ends within its bound, and one step short of it*)
@@ -252,7 +295,7 @@ in
       (fn () => string_of_ending e ^ ", " ^ string_of_int n ^ " steps, events: " ^ commas events)
       (e = Reached andalso n = 21 andalso
         take 3 events = ["run", "procedure nested_run", "run"] andalso
-        drop 3 events = replicate 17 "rule");
+        drop 3 events = flat (replicate 21 ["rule", "made"]));
 end;
 \<close>
 
@@ -402,11 +445,16 @@ local
   val ctxt = \<^context>;
   val thy = \<^theory>;
 in
-  (*what is counted is what the simplifier reports, for the simpset of the theory*)
+  (*for the simpset of the theory: every rewrite made is a step; the starts of runs and the
+    attempts that give nothing are reported and not counted*)
   val _ =
-    let val (((), n), events) = Events.logged (counted finite) ctxt in
-      check_showing "7: the count is the number of reported events"
-        (fn () => string_of_int n ^ " steps, events: " ^ commas events) (n = length events)
+    let
+      val (((), n), events) = Events.logged (counted finite) ctxt;
+      val made = length (filter (fn e => e = "made") events);
+    in
+      check_showing "7: the count lies between the rewrites made and the events reported"
+        (fn () => string_of_int n ^ " steps, events: " ^ commas events)
+        (0 < made andalso made <= n andalso n < length events)
     end;
 
   val _ =
@@ -597,7 +645,8 @@ in
             SOME eq' => Thm.prop_of eq' aconv Thm.prop_of eq
           | NONE => false);
         check_showing ("7: events of " ^ input)
-          (fn () => string_of_int n ^ " steps, events: " ^ commas events) (n = length events)
+          (fn () => string_of_int n ^ " steps, events: " ^ commas events)
+          (length (filter (fn e => e = "made") events) <= n andalso n < length events)
       end);
 end;
 \<close>
